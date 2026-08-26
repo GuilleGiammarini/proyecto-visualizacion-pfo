@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+:root {
+  --color-unvm-blue: #003366;       /* Azul institucional principal */
+  --color-unvm-blue-dark: #002244;  /* Azul oscuro */
+  --color-unvm-light: #f0f4f8;      /* Fondo claro de tarjetas */
+  --color-unvm-accent: #0066cc;     /* Azul brillante */
+}
+
+/* Estilos base opcionales para la app */
+body {
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-family: system-ui, -apple-system, sans-serif;
+}
