@@ -93,7 +93,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [searchConvenios, setSearchConvenios] = useState('');
   
-  // Nuevos estados para los filtros de convenios
+  // Estados para los filtros de convenios
   const [filtroTipoDocConvenio, setFiltroTipoDocConvenio] = useState('todos');
   const [filtroEstadoConvenio, setFiltroEstadoConvenio] = useState('todos');
   const [filtroLocalidadConvenio, setFiltroLocalidadConvenio] = useState('todos');
@@ -234,21 +234,33 @@ export default function App() {
     }).filter(est => est.rotaciones.length > 0);
   }, [rotaciones, hoy]);
 
-  // Listas desplegables dinámicas para los filtros de convenios
+  // Listas desplegables dinámicas normalizadas para los filtros de convenios
   const opcionesTipoDocConvenios = useMemo(() => {
-    return Array.from(new Set(convenios.map(conv => conv['TIPO DE DOCUMENTO'] || conv.Tipo_Documento || conv.TipoDocumento).filter(Boolean)));
+    return Array.from(new Set(convenios.map(conv => {
+      const val = conv['TIPO DE DOCUMENTO'] || conv.Tipo_Documento || conv.TipoDocumento;
+      return val ? val.toString().trim() : null;
+    }).filter(Boolean))).sort();
   }, [convenios]);
 
   const opcionesEstadoConvenios = useMemo(() => {
-    return Array.from(new Set(convenios.map(conv => conv.Estado || conv.ESTADO).filter(Boolean)));
+    return Array.from(new Set(convenios.map(conv => {
+      const val = conv.Estado || conv.ESTADO;
+      return val ? val.toString().trim() : null;
+    }).filter(Boolean))).sort();
   }, [convenios]);
 
   const opcionesLocalidadConvenios = useMemo(() => {
-    return Array.from(new Set(convenios.map(conv => conv.Localidad).filter(Boolean)));
+    return Array.from(new Set(convenios.map(conv => {
+      const val = conv.Localidad || conv.LOCALIDAD || conv.localidad;
+      return val ? val.toString().trim() : null;
+    }).filter(Boolean))).sort();
   }, [convenios]);
 
   const opcionesDepartamentoConvenios = useMemo(() => {
-    return Array.from(new Set(convenios.map(conv => conv.Departamento).filter(Boolean)));
+    return Array.from(new Set(convenios.map(conv => {
+      const val = conv.Departamento;
+      return val ? val.toString().trim() : null;
+    }).filter(Boolean))).sort();
   }, [convenios]);
 
   const conveniosFiltrados = useMemo(() => {
@@ -266,10 +278,10 @@ export default function App() {
       const valLocalidad = conv.Localidad || '';
       const valDepto = conv.Departamento || '';
 
-      const coincideTipoDoc = filtroTipoDocConvenio === 'todos' || valTipoDoc === filtroTipoDocConvenio;
-      const coincideEstado = filtroEstadoConvenio === 'todos' || valEstado === filtroEstadoConvenio;
-      const coincideLocalidad = filtroLocalidadConvenio === 'todos' || valLocalidad === filtroLocalidad;
-      const coincideDepartamento = filtroDepartamentoConvenio === 'todos' || valDepto === filtroDepartamentoConvenio;
+      const coincideTipoDoc = filtroTipoDocConvenio === 'todos' || normalizarTexto(valTipoDoc) === normalizarTexto(filtroTipoDocConvenio);
+      const coincideEstado = filtroEstadoConvenio === 'todos' || normalizarTexto(valEstado) === normalizarTexto(filtroEstadoConvenio);
+      const coincideLocalidad = filtroLocalidadConvenio === 'todos' || normalizarTexto(valLocalidad) === normalizarTexto(filtroLocalidadConvenio);
+      const coincideDepartamento = filtroDepartamentoConvenio === 'todos' || normalizarTexto(valDepto) === normalizarTexto(filtroDepartamentoConvenio);
 
       return coincideBusqueda && coincideTipoDoc && coincideEstado && coincideLocalidad && coincideDepartamento;
     });
@@ -978,7 +990,7 @@ export default function App() {
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       : 'bg-amber-50 text-amber-700 border border-amber-200'
                   }`}>
-                    {convenioSeleccionado.Estado || convenioSeleuchtado?.ESTADO || convenioSeleccionado.ESTADO || '-'}
+                    {convenioSeleccionado.Estado || convenioSeleccionado.ESTADO || '-'}
                   </span>
                 </div>
 
@@ -995,7 +1007,7 @@ export default function App() {
                     {
                       (() => {
                         const fecha = convenioSeleccionado.Fecha_Ini || convenioSeleccionado.FECHA_INI || convenioSeleccionado.Fecha_Inicio;
-                        return fecha ? fecha.split('T')[0] : '-';
+                        return fecha ? String(fecha).split('T')[0] : '-';
                       })()
                     }
                   </span>
@@ -1007,7 +1019,7 @@ export default function App() {
                     {
                       (() => {
                         const fecha = convenioSeleccionado.Fecha_Fin || convenioSeleccionado.FECHA_FIN;
-                        return fecha ? fecha.split('T')[0] : '-';
+                        return fecha ? String(fecha).split('T')[0] : '-';
                       })()
                     }
                   </span>
