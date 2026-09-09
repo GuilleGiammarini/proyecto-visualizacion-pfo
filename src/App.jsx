@@ -74,8 +74,44 @@ const normalizarTexto = (texto) => {
 };
 
 // ============================================================
+// COLORES Y CONFIGURACIÓN DE ESTADOS DE CONVENIOS
+// ============================================================
+const COLORES_ESTADO_CONVENIO = {
+  "vencido": { bg: "#DC2626", text: "VENCIDO" },
+  "vigente - requiere renovacion": { bg: "#EA580C", text: "VIGENTE - REQUIERE RENOVACIÓN" },
+  "vigente - ratificacion": { bg: "#CA8A04", text: "VIGENTE - RATIFICACIÓN" },
+  "ratificacion": { bg: "#EAB308", text: "RATIFICACIÓN" },
+  "incompleto": { bg: "#2563EB", text: "INCOMPLETO" },
+  "borrador": { bg: "#7C3AED", text: "BORRADOR" },
+  "vigente - renovacion automatica": { bg: "#0D9488", text: "VIGENTE - RENOVACIÓN AUTOMÁTICA" },
+  "vigente": { bg: "#16A34A", text: "VIGENTE" },
+  "sin especificar": { bg: "#6B7280", text: "SIN ESPECIFICAR" },
+  "vacio": { bg: "#9CA3AF", text: "VACÍO" }
+};
+
+const obtenerColorEstadoConvenio = (estadoStr) => {
+  const norm = normalizarTexto(estadoStr || "vacio");
+  if (!norm || norm === "-" || norm === "") return COLORES_ESTADO_CONVENIO["vacio"];
+  
+  for (const [clave, obj] of Object.entries(COLORES_ESTADO_CONVENIO)) {
+    if (norm.includes(clave)) return obj;
+  }
+  return COLORES_ESTADO_CONVENIO["sin especificar"];
+};
+
+const crearIconoPersonalizadoConvenio = (estado) => {
+  const config = obtenerColorEstadoConvenio(estado);
+  return L.divIcon({
+    className: 'custom-convenio-marker',
+    html: `<div style="background-color: ${config.bg}; width: 18px; height: 18px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9]
+  });
+};
+
+// ============================================================
 // CATÁLOGO DE INSTITUCIONES CON COORDENADAS EXACTAS
-// (cargado desde la tabla de latitud/longitud provista)
 // ============================================================
 const INSTITUCIONES_RAW = [
   ["AMBAR S.R.L.", -32.4076, -63.2304],
@@ -180,14 +216,11 @@ const INSTITUCIONES_RAW = [
   ["UNVM", -32.4089, -63.2273],
 ];
 
-// Diccionario normalizado: "nombre normalizado" -> [lat, lon]
 const CATALOGO_INSTITUCIONES = INSTITUCIONES_RAW.reduce((acc, [nombre, lat, lon]) => {
   acc[normalizarTexto(nombre)] = [lat, lon];
   return acc;
 }, {});
 
-// Busca coordenadas exactas en el catálogo. Primero match exacto,
-// luego coincidencia parcial (la clave más larga que aparezca dentro del nombre, o viceversa).
 const buscarEnCatalogoInstituciones = (nombreInst) => {
   if (!nombreInst) return null;
   const norm = normalizarTexto(nombreInst);
@@ -200,7 +233,7 @@ const buscarEnCatalogoInstituciones = (nombreInst) => {
   let mejorClave = null;
   let mejorLongitud = 0;
   for (const clave of Object.keys(CATALOGO_INSTITUCIONES)) {
-    if (clave.length < 4) continue; // evita falsos positivos con siglas muy cortas
+    if (clave.length < 4) continue;
     if ((norm.includes(clave) || clave.includes(norm)) && clave.length > mejorLongitud) {
       mejorClave = clave;
       mejorLongitud = clave.length;
@@ -215,8 +248,6 @@ const obtenerCoordenadas = (nombreLocalidad) => {
   return COORDENADAS_LOCALIDADES[clave] || [-32.4075, -63.2402];
 };
 
-// Resuelve la mejor coordenada disponible para una institución:
-// 1) catálogo exacto de instituciones, 2) coordenadas ya geocodificadas (Nominatim), 3) fallback por localidad
 const resolverCoordenadasInstitucion = (nombreInst, localidad, coordsGuardadas) => {
   const catalogo = buscarEnCatalogoInstituciones(nombreInst);
   if (catalogo) return catalogo;
@@ -239,6 +270,21 @@ const extraerLocalidadDeNombre = (nombreInst, localidadOriginal) => {
   return localidadOriginal;
 };
 
+const CONFIG_ESTADISTICAS_CONVENIOS = [
+  { tipo: 'Borrador', color: '#78909C', icono: '📋', match: ['borrador'] },
+  { tipo: 'Protocolo', color: '#7E57C2', icono: '📑', match: ['protocolo de trabajo'] },
+  { tipo: 'Nota de intención', color: '#29B6F6', icono: '✉️', match: ['nota intención', 'nota intencion'] },
+  { tipo: 'Nota de adhesión', color: '#26A69A', icono: '🤝', match: ['nota adhesión', 'nota adhesion', 'enred'] },
+  { tipo: 'Convenio Marco', color: '#43A047', icono: '📄', match: ['convenio marco'] },
+  { tipo: 'Resolución CD', color: '#3949AB', icono: '🏛️', match: ['resolución del consejo directivo', 'resolucion del consejo directivo'] },
+  { tipo: 'Resolución CS', color: '#00838F', icono: '🏛️', match: ['resolución del consejo superior', 'resolucion del consejo superior'] },
+  { tipo: 'Convenio específico', color: '#FB8C00', icono: '🎓', match: ['convenio específico', 'convenio especifico'] },
+  { tipo: 'Comisión de Estudios', color: '#D81B60', icono: '🎓', match: ['comisión de estudios', 'comision de estudios'] },
+  { tipo: 'Acta Acuerdo', color: '#F9A825', icono: '📝', match: ['acta acuerdo'] },
+  { tipo: 'Adenda', color: '#EC407A', icono: '➕', match: ['adenda'] },
+  { tipo: 'Convenio-Programa', color: '#5C6BC0', icono: '📚', match: ['convenio-programa', 'convenio programa'] }
+];
+
 const formatearFecha = (fecha) => {
   if (!fecha || isNaN(fecha)) return '';
   const dia = String(fecha.getDate()).padStart(2, '0');
@@ -246,6 +292,40 @@ const formatearFecha = (fecha) => {
   const anio = fecha.getFullYear();
   return `${dia}/${mes}/${anio}`;
 };
+
+// ============================================================
+// LEYENDA DEL MAPA DE CONVENIOS
+// ============================================================
+function LeyendaEstadosConvenios() {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 h-fit">
+      
+      <h4 className="text-xs font-bold text-blue-950 uppercase tracking-wider mb-3">
+        Leyenda
+      </h4>
+
+      <div className="space-y-2">
+        {Object.entries(COLORES_ESTADO_CONVENIO).map(([clave, config]) => (
+          <div
+            key={clave}
+            className="flex items-center gap-2.5"
+          >
+            <span
+              className="w-4 h-4 rounded-full border-2 border-white shadow-sm flex-shrink-0"
+              style={{
+                backgroundColor: config.bg
+              }}
+            />
+
+            <span className="text-[11px] font-medium text-slate-600 leading-tight">
+              {config.text}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [rotaciones, setRotaciones] = useState([]);
@@ -256,7 +336,6 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [searchConvenios, setSearchConvenios] = useState('');
   
-  // Estados para los filtros de convenios
   const [filtroTipoDocConvenio, setFiltroTipoDocConvenio] = useState('todos');
   const [filtroEstadoConvenio, setFiltroEstadoConvenio] = useState('todos');
   const [filtroLocalidadConvenio, setFiltroLocalidadConvenio] = useState('todos');
@@ -264,7 +343,7 @@ export default function App() {
 
   const [seccionPrincipal, setSeccionPrincipal] = useState('estudiantes'); 
   const [vista, setVista] = useState('lista'); 
-  const [vistaConvenios, setVistaConvenios] = useState('tabla'); // 'tabla' o 'mapa' para convenios
+  const [vistaConvenios, setVistaConvenios] = useState('tabla'); 
   const [modoMapa, setModoMapa] = useState('localidad'); 
   const [estudianteSeleccionado, setEstudianteSeleccionado] = useState(null);
   const [convenioSeleccionado, setConvenioSeleccionado] = useState(null);
@@ -399,7 +478,27 @@ export default function App() {
     }).filter(est => est.rotaciones.length > 0);
   }, [rotaciones, hoy]);
 
-  // Listas desplegables dinámicas normalizadas para los filtros de convenios
+  const estadisticasTipoDoc = useMemo(() => {
+    const conteo = {};
+    CONFIG_ESTADISTICAS_CONVENIOS.forEach(item => {
+      conteo[item.tipo] = 0;
+    });
+
+    convenios.forEach(conv => {
+      const tipoDocTexto = normalizarTexto(conv['TIPO DE DOCUMENTO'] || conv.Tipo_Documento || conv.TipoDocumento || '');
+      
+      for (const configItem of CONFIG_ESTADISTICAS_CONVENIOS) {
+        const coincide = configItem.match.some(m => tipoDocTexto.includes(normalizarTexto(m)));
+        if (coincide) {
+          conteo[configItem.tipo] = (conteo[configItem.tipo] || 0) + 1;
+          break;
+        }
+      }
+    });
+
+    return conteo;
+  }, [convenios]);
+
   const opcionesTipoDocConvenios = useMemo(() => {
     return Array.from(new Set(convenios.map(conv => {
       const val = conv['TIPO DE DOCUMENTO'] || conv.Tipo_Documento || conv.TipoDocumento;
@@ -452,8 +551,6 @@ export default function App() {
     });
   }, [convenios, searchConvenios, filtroTipoDocConvenio, filtroEstadoConvenio, filtroLocalidadConvenio, filtroDepartamentoConvenio]);
 
-  // Procesamiento para mapear convenios desglosando filas con múltiples instituciones
-  // separadas por saltos de línea (enter), punto y coma o viñeta.
   const conveniosGeoreferenciados = useMemo(() => {
     const listaConveniosMapa = [];
     conveniosFiltrados.forEach(conv => {
@@ -481,8 +578,6 @@ export default function App() {
     return listaConveniosMapa;
   }, [conveniosFiltrados]);
 
-  // Conteo de instituciones de convenios para el mapa (una entrada por institución individual,
-  // aunque hayan venido varias en la misma celda separadas por enter)
   const conteoConveniosInst = useMemo(() => {
     const acc = {};
     conveniosGeoreferenciados.forEach(item => {
@@ -571,8 +666,7 @@ export default function App() {
     return acc;
   }, {});
 
-  // Geocoding: sólo se llama a Nominatim para instituciones que NO están en el catálogo
-  // de coordenadas exactas (CATALOGO_INSTITUCIONES). Las que sí están, se resuelven al instante.
+  // Geocoding seguro y optimizado para evitar pantallas en blanco
   useEffect(() => {
     if (seccionPrincipal === 'estudiantes' && vista !== 'mapa') return;
     if (seccionPrincipal === 'convenios' && vistaConvenios !== 'mapa') return;
@@ -584,8 +678,15 @@ export default function App() {
 
     const buscarCoordenadas = async () => {
       for (const [inst, datos] of Object.entries(targetMap)) {
+        if (!isMounted) break;
         if (currentCoords[inst]) continue;
-        if (buscarEnCatalogoInstituciones(inst)) continue; // ya resuelto por catálogo exacto
+        
+        // Si está en el catálogo, lo resolvemos inmediatamente sin llamadas externas
+        const catalogoMatch = buscarEnCatalogoInstituciones(inst);
+        if (catalogoMatch) {
+          setCoordsState(prev => ({ ...prev, [inst]: catalogoMatch }));
+          continue;
+        }
 
         const localidadReal = extraerLocalidadDeNombre(inst, datos.localidad);
         const query = encodeURIComponent(`${inst}, ${localidadReal}, Córdoba, Argentina`);
@@ -614,7 +715,7 @@ export default function App() {
             }));
           }
         }
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 600));
       }
     };
 
@@ -977,177 +1078,240 @@ export default function App() {
               </div>
             </div>
 
-            {/* SECCIÓN DE FILTROS PARA CONVENIOS */}
+            {/* Tarjetas de estadísticas dinámicas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-2">
+              {CONFIG_ESTADISTICAS_CONVENIOS.map((item, idx) => (
+                <div 
+                  key={idx}
+                  className="bg-slate-50/60 border border-slate-200/80 border-l-4 p-3.5 rounded-xl shadow-sm flex items-center justify-between transition-all hover:bg-white"
+                  style={{ borderLeftColor: item.color }}
+                >
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-tight">{item.tipo}</p>
+                    <p className="text-xl font-bold text-slate-800 mt-0.5">
+                      {loadingConvenios ? '...' : (estadisticasTipoDoc[item.tipo] || 0)}
+                    </p>
+                  </div>
+                  <span className="text-xl">{item.icono}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* FILTROS DE CONVENIOS */}
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Filtrar Convenios</span>
+                <span className="text-xs font-bold text-blue-900 uppercase">Filtros Avanzados de Convenios</span>
                 {(filtroTipoDocConvenio !== 'todos' || filtroEstadoConvenio !== 'todos' || filtroLocalidadConvenio !== 'todos' || filtroDepartamentoConvenio !== 'todos' || searchConvenios !== '') && (
                   <button
                     onClick={limpiarFiltrosConvenios}
-                    className="text-xs font-semibold text-blue-800 hover:text-blue-950 hover:underline"
+                    className="text-xs font-semibold text-blue-800 hover:underline"
                   >
-                    Limpiar filtros
+                    Limpiar filtros de convenios
                   </button>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Tipo de Documento */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[11px] font-medium text-slate-600 mb-1">Tipo de Documento</label>
                   <select
                     value={filtroTipoDocConvenio}
                     onChange={(e) => setFiltroTipoDocConvenio(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700"
                   >
                     <option value="todos">Todos los tipos</option>
-                    {opcionesTipoDocConvenios.map((tipo, idx) => (
-                      <option key={idx} value={tipo}>{tipo}</option>
+                    {opcionesTipoDocConvenios.map((t) => (
+                      <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Estado */}
                 <div>
                   <label className="block text-[11px] font-medium text-slate-600 mb-1">Estado</label>
                   <select
                     value={filtroEstadoConvenio}
                     onChange={(e) => setFiltroEstadoConvenio(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700"
                   >
                     <option value="todos">Todos los estados</option>
-                    {opcionesEstadoConvenios.map((est, idx) => (
-                      <option key={idx} value={est}>{est}</option>
+                    {opcionesEstadoConvenios.map((est) => (
+                      <option key={est} value={est}>{est}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Localidad */}
                 <div>
                   <label className="block text-[11px] font-medium text-slate-600 mb-1">Localidad</label>
                   <select
                     value={filtroLocalidadConvenio}
                     onChange={(e) => setFiltroLocalidadConvenio(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700"
                   >
                     <option value="todos">Todas las localidades</option>
-                    {opcionesLocalidadConvenios.map((loc, idx) => (
-                      <option key={idx} value={loc}>{loc}</option>
+                    {opcionesLocalidadConvenios.map((loc) => (
+                      <option key={loc} value={loc}>{loc}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Departamento */}
                 <div>
                   <label className="block text-[11px] font-medium text-slate-600 mb-1">Departamento</label>
                   <select
                     value={filtroDepartamentoConvenio}
                     onChange={(e) => setFiltroDepartamentoConvenio(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-900"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-700"
                   >
                     <option value="todos">Todos los departamentos</option>
-                    {opcionesDepartamentoConvenios.map((dept, idx) => (
-                      <option key={idx} value={dept}>{dept}</option>
+                    {opcionesDepartamentoConvenios.map((dep) => (
+                      <option key={dep} value={dep}>{dep}</option>
                     ))}
                   </select>
                 </div>
               </div>
             </div>
 
+            {/* VISTA DE TABLA O MAPA PARA CONVENIOS */}
             {loadingConvenios ? (
               <div className="p-12 text-center text-slate-400 font-medium">
                 Cargando convenios desde Google Sheets...
               </div>
-            ) : vistaConvenios === 'mapa' ? (
-              <div className="space-y-4 pt-2">
-                <div className="flex justify-between items-center">
-                  <p className="text-xs text-slate-500 font-medium">
-                    Georreferenciación de instituciones vinculadas a convenios ({Object.keys(conteoConveniosInst).length} ubicaciones detectadas)
-                  </p>
+            ) : vistaConvenios === 'tabla' ? (
+              conveniosFiltrados.length === 0 ? (
+                <div className="p-12 text-center text-slate-400 font-medium border border-dashed border-slate-200 rounded-xl">
+                  No se encontraron convenios con los filtros actuales.
                 </div>
-                <div className="relative h-[550px] w-full rounded-xl overflow-hidden border border-slate-200 z-0">
-                  <MapContainer 
-                    center={[-32.1, -63.5]} 
-                    zoom={8} 
-                    scrollWheelZoom={true} 
-                    className="h-full w-full"
-                  >
-                    <MapResizeHelper />
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    
-                    {Object.entries(conteoConveniosInst).map(([inst, datos]) => {
-                      const coords = resolverCoordenadasInstitucion(inst, datos.localidad, coordenadasConveniosInst);
-                      
-                      return (
-                        <Marker key={inst} position={coords}>
-                          <Popup>
-                            <div className="p-1 text-center font-sans max-w-[220px]">
-                              <h4 className="font-bold text-blue-950 text-xs leading-tight">{inst}</h4>
-                              <p className="text-[11px] text-slate-400 mt-0.5">{datos.localidad}</p>
-                              <p className="text-xs text-slate-600 mt-1">
-                                <span className="font-bold text-blue-900">{datos.cantidadConvenios}</span> convenio(s) asociado(s)
-                              </p>
-                              <div className="mt-2 text-left max-h-32 overflow-y-auto space-y-1 border-t border-slate-100 pt-1">
-                                {datos.conveniosAsociados.map((c, i) => (
-                                  <div key={i} className="text-[10px] bg-slate-50 p-1 rounded border border-slate-100">
-                                    <span className="font-bold text-blue-900">{c['TIPO DE DOCUMENTO'] || c.Tipo_Documento || 'Convenio'}</span>: {c.Estado || c.ESTADO || 'Sin estado'}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </Popup>
-                        </Marker>
-                      );
-                    })}
-                  </MapContainer>
-                </div>
-              </div>
-            ) : conveniosFiltrados.length === 0 ? (
-              <div className="p-12 text-center text-slate-400 font-medium border border-slate-200 rounded-xl">
-                No se encontraron convenios con los filtros seleccionados.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100/70 border-b border-slate-200 text-xs font-bold text-blue-950 uppercase">
-                      <th className="p-3">ID</th>
-                      <th className="p-3">Institución</th>
-                      <th className="p-3">Localidad</th>
-                      <th className="p-3">Departamento</th>
-                      <th className="p-3">Tipo de Documento</th>
-                      <th className="p-3">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                    {conveniosFiltrados.map((conv, idx) => (
-                      <tr 
-                        key={idx} 
-                        onClick={() => setConvenioSeleccionado(conv)}
-                        className="hover:bg-blue-50/50 cursor-pointer transition-colors"
-                      >
-                        <td className="p-3 font-mono font-semibold text-blue-950">{conv.ID_Institucion || conv.ID || '-'}</td>
-                        <td className="p-3 font-semibold text-slate-800">{conv['INSTITUCIÓN/ES'] || conv.Institucion || conv.INSTITUCIÓN || '-'}</td>
-                        <td className="p-3 text-slate-600">{conv.Localidad || '-'}</td>
-                        <td className="p-3 text-slate-500">{conv.Departamento || '-'}</td>
-                        <td className="p-3 text-slate-700 font-medium">{conv['TIPO DE DOCUMENTO'] || conv.Tipo_Documento || conv.TipoDocumento || '-'}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                            (conv.Estado || conv.ESTADO || '').toLowerCase().includes('vigente')
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                            {conv.Estado || conv.ESTADO || '-'}
-                          </span>
-                        </td>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                        <th className="p-3">Institución</th>
+                        <th className="p-3">Tipo de Documento</th>
+                        <th className="p-3">Localidad</th>
+                        <th className="p-3">Estado</th>
+                        <th className="p-3 text-center">Acción</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {conveniosFiltrados.map((conv, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3 font-semibold text-slate-800">
+                            {conv['INSTITUCIÓN/ES'] || conv.Institucion || conv.INSTITUCIÓN || 'Sin nombre'}
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            {conv['TIPO DE DOCUMENTO'] || conv.Tipo_Documento || conv.TipoDocumento || '-'}
+                          </td>
+                          <td className="p-3 text-slate-600">
+                            {conv.Localidad || '-'}
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                              (conv.Estado || conv.ESTADO || '').toLowerCase().includes('vigente')
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {conv.Estado || conv.ESTADO || '-'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <button
+                              onClick={() => setConvenioSeleccionado(conv)}
+                              className="px-2.5 py-1 bg-blue-50 text-blue-900 font-bold rounded hover:bg-blue-900 hover:text-white transition-colors"
+                            >
+                              Ver detalle
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : (
+<div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4 items-start">
+  
+  {/* MAPA */}
+  <div className="relative h-[500px] w-full rounded-xl overflow-hidden border border-slate-200 z-0">
+    <MapContainer 
+      center={[-32.1, -63.5]} 
+      zoom={8} 
+      scrollWheelZoom={true} 
+      className="h-full w-full"
+    >
+      <MapResizeHelper />
+
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+
+      {Object.entries(conteoConveniosInst).map(([inst, datos]) => {
+        const coords = resolverCoordenadasInstitucion(
+          inst,
+          datos.localidad,
+          coordenadasConveniosInst
+        );
+
+        const estadoPrincipal =
+          datos.conveniosAsociados?.[0]?.Estado ||
+          datos.conveniosAsociados?.[0]?.ESTADO ||
+          '';
+
+        const iconoPersonalizado =
+          crearIconoPersonalizadoConvenio(estadoPrincipal);
+
+        return (
+          <Marker
+            key={inst}
+            position={coords}
+            icon={iconoPersonalizado}
+          >
+            <Popup>
+              <div className="p-1 text-center font-sans max-w-[220px]">
+                
+                <h4 className="font-bold text-blue-950 text-xs leading-tight">
+                  {inst}
+                </h4>
+
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {datos.localidad}
+                </p>
+
+                <p className="text-xs text-slate-600 mt-1">
+                  <span className="font-bold text-blue-900">
+                    {datos.cantidadConvenios}
+                  </span>{" "}
+                  convenio(s) asociado(s)
+                </p>
+
+                <div className="mt-2 text-left max-h-32 overflow-y-auto space-y-1 border-t border-slate-100 pt-1">
+                  {datos.conveniosAsociados.map((c, i) => (
+                    <div
+                      key={i}
+                      className="text-[10px] bg-slate-50 p-1 rounded border border-slate-100"
+                    >
+                      <span className="font-bold text-blue-900">
+                        {c['TIPO DE DOCUMENTO'] ||
+                          c.Tipo_Documento ||
+                          'Convenio'}
+                      </span>
+                      : {c.Estado || c.ESTADO || 'Sin estado'}
+                    </div>
+                  ))}
+                </div>
+
               </div>
+            </Popup>
+          </Marker>
+        );
+      })}
+    </MapContainer>
+  </div>
+
+  {/* LEYENDA */}
+  <LeyendaEstadosConvenios />
+
+</div>
             )}
           </div>
         )}
