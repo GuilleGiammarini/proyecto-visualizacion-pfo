@@ -1267,7 +1267,7 @@ export default function App() {
             icon={iconoPersonalizado}
           >
             <Popup>
-              <div className="p-1 text-center font-sans max-w-[220px]">
+              <div className="p-1 text-center font-sans max-w-[240px]">
                 
                 <h4 className="font-bold text-blue-950 text-xs leading-tight">
                   {inst}
@@ -1284,18 +1284,41 @@ export default function App() {
                   convenio(s) asociado(s)
                 </p>
 
-                <div className="mt-2 text-left max-h-32 overflow-y-auto space-y-1 border-t border-slate-100 pt-1">
+                {/* LISTADO INTERACTIVO DE DOCUMENTOS / CONVENIOS */}
+                <div className="mt-2 text-left max-h-36 overflow-y-auto space-y-1.5 border-t border-slate-100 pt-1.5">
                   {datos.conveniosAsociados.map((c, i) => (
                     <div
                       key={i}
-                      className="text-[10px] bg-slate-50 p-1 rounded border border-slate-100"
+                      className="text-[10px] bg-slate-50 p-1.5 rounded border border-slate-200 flex flex-col gap-1"
                     >
-                      <span className="font-bold text-blue-900">
-                        {c['TIPO DE DOCUMENTO'] ||
-                          c.Tipo_Documento ||
-                          'Convenio'}
-                      </span>
-                      : {c.Estado || c.ESTADO || 'Sin estado'}
+                      <div className="flex justify-between items-start gap-1">
+                        <span className="font-bold text-blue-900 leading-tight">
+                          {c['TIPO DE DOCUMENTO'] || c.Tipo_Documento || 'Convenio'}
+                        </span>
+                        <span className="text-[9px] px-1 rounded bg-slate-200 text-slate-700 font-semibold">
+                          {c.Estado || c.ESTADO || 'Sin estado'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
+                        <button
+                          onClick={() => setConvenioSeleccionado(c)}
+                          className="text-[10px] text-blue-800 hover:underline font-semibold"
+                        >
+                          Ver detalle 📄
+                        </button>
+
+                        {(c.LINK || c.Link || c.url) && (
+                          <a 
+                            href={c.LINK || c.Link || c.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="bg-blue-900 hover:bg-blue-950 text-white px-2 py-0.5 rounded font-bold text-[9px] shadow-sm"
+                          >
+                            Ver 🔍
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
