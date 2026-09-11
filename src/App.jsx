@@ -385,17 +385,11 @@ export default function App() {
   const hoy = new Date();
   const msPorSemana = 1000 * 60 * 60 * 24 * 7;
 
-  const estudiantesAgrupados = useMemo(() => {
+const estudiantesAgrupados = useMemo(() => {
     return Object.values(
       rotaciones.reduce((acc, item) => {
         const dni = item.DNI;
         if (!dni) return acc;
-
-        const institucionItem = item.Institución || item.Institucion || '';
-        const institucionLimpia = institucionItem.toString().trim();
-        if (!institucionLimpia || institucionLimpia === '-' || institucionLimpia === '') {
-          return acc;
-        }
 
         if (!acc[dni]) {
           acc[dni] = {
@@ -418,10 +412,19 @@ export default function App() {
           acc[dni].localidad = item.Localidad;
         }
 
+        const institucionItem = item.Institución || item.Institucion || '';
+        const institucionLimpia = institucionItem.toString().trim();
+        const moduloNombre = item.Modulo_Rotacion || item.Modulo || 'Módulo';
+
+        // Si la institución está vacía, mostramos el nombre del módulo o un indicador claro
+        const institucionFinal = (!institucionLimpia || institucionLimpia === '-' || institucionLimpia === '') 
+          ? `Sin institución asignada (${moduloNombre})` 
+          : institucionLimpia;
+
         acc[dni].rotaciones.push({
-          modulo: item.Modulo_Rotacion || item.Modulo || 'Módulo',
+          modulo: moduloNombre,
           rangoSemana: item['Rango/Semana'] || '',
-          institucion: institucionLimpia,
+          institucion: institucionFinal,
           localidad: item.Localidad || acc[dni].localidad,
           fechaInicio: item.Fecha_Inicio ? new Date(item.Fecha_Inicio) : null,
           fechaFin: item.Fecha_Fin ? new Date(item.Fecha_Fin) : null
