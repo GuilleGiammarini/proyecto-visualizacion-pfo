@@ -1,0 +1,1574 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  ResponsiveContainer,
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
+  LineChart, Line
+} from 'recharts';
+ 
+const API_URL = "https://script.google.com/macros/s/AKfycby-qfURF_V4SjrHJIbr7_O-FVIm-QxUJf5nSwg3s5Lyx5as0o2jsEVQVfCSU751OprO-A/exec";
+ 
+const UMBRAL_APROBACION_ESTACION = 60; 
+const PORCENTAJE_MIN_ESTACIONES_APROBADAS = 0.70; 
+const PROMEDIO_MIN_EXAMEN = 60; 
+const NOTA_MAXIMA_ITEM = 5; 
+ 
+const MARCA = {
+  navyOscuro: '#12243d',   
+  navy: '#1c3f66',         
+  navyClaro: '#2f5a86',    
+  teal: '#5fa8ac',         
+  fondo: '#f4f7fb'         
+};
+ 
+const BANDAS = [
+  { min: 90, bg: 'bg-emerald-700', text: 'text-white', nombre: 'Excelente' },
+  { min: 80, bg: 'bg-emerald-500', text: 'text-white', nombre: 'Muy bueno' },
+  { min: 70, bg: 'bg-teal-500', text: 'text-white', nombre: 'Bueno' },
+  { min: 60, bg: 'bg-amber-400', text: 'text-slate-900', nombre: 'Aprobado justo' },
+  { min: 0, bg: 'bg-rose-500', text: 'text-white', nombre: 'Desaprobado' }
+];
+ 
+const obtenerBanda = (porcentaje) => BANDAS.find((b) => porcentaje >= b.min) || BANDAS[BANDAS.length - 1];
+const colorBarra = (porcentaje) => (porcentaje >= UMBRAL_APROBACION_ESTACION ? '#10b981' : '#f43f5e');
+ 
+const obtenerNotaEscala = (porcentaje) => {
+  const p = Math.round(porcentaje);
+  if (p >= 96) return 10;
+  if (p >= 90) return 9;
+  if (p >= 83) return 8;
+  if (p >= 77) return 7;
+  if (p >= 70) return 6;
+  if (p >= 65) return 5;
+  if (p >= 60) return 4;
+  return 2;
+};
+ 
+const normalizarTexto = (texto) => {
+  if (!texto) return "";
+  return texto
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+};
+ 
+const normalizarNota = (valor) => {
+  if (typeof valor === 'boolean') return valor ? NOTA_MAXIMA_ITEM : 0;
+  const num = parseFloat(valor);
+  if (isNaN(num)) return 0;
+  return Math.min(NOTA_MAXIMA_ITEM, Math.max(0, num));
+};
+ 
+const formatearFecha = (iso) => {
+  if (!iso) return 'Sin fecha';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return 'Sin fecha';
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+ 
+const EstilosImpresion = () => (
+  <style>{`
+    @page {
+      size: A4 portrait;
+      margin: 10mm 11mm 12mm 11mm;
+    }
+
+    @media print {
+      html, body {
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+      }
+
+      body {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      body * {
+        visibility: hidden;
+      }
+
+      /* ==========================================================
+         1. ESTILOS DE IMPRESIÓN PARA EL MODAL DE ESTACIONES
+         ========================================================== */
+      .contenedor-modal-ecoe {
+        visibility: visible !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+        overflow: visible !important;
+        box-shadow: none !important;
+        border: none !important;
+        backdrop-filter: none !important;
+      }
+
+      #modal-evaluacion-contenido {
+        visibility: visible !important;
+        position: static !important;
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+      }
+
+      #modal-evaluacion-contenido * {
+        visibility: visible !important;
+      }
+
+      /* ==========================================================
+         2. ESTILOS DE IMPRESIÓN PARA EL PORTAFOLIO COMPLETO
+         ========================================================== */
+      #contenedor-portafolio-impresion.modo-impresion {
+        visibility: visible !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        background: white !important;
+        overflow: visible !important;
+      }
+
+      #contenedor-portafolio-impresion.modo-impresion * {
+        visibility: visible !important;
+      }
+
+      /* Ocultar elementos generales con la clase no-imprimir */
+      .no-imprimir {
+        display: none !important;
+        visibility: hidden !important;
+      }
+
+      .membrete-impresion {
+        display: flex !important;
+        visibility: visible !important;
+        align-items: center;
+        justify-content: space-between;
+        width: 100% !important;
+        min-height: 44px !important;
+        padding: 0 0 7px 0 !important;
+        margin: 0 0 10px 0 !important;
+        border-bottom: 2px solid #1c3f66 !important;
+      }
+
+      .membrete-impresion img {
+        height: 43px !important;
+        width: auto !important;
+      }
+
+      /* Encabezado de la evaluación */
+      #modal-evaluacion-contenido > div.flex.justify-between.items-start {
+        padding-bottom: 8px !important;
+        margin-bottom: 10px !important;
+      }
+
+      #modal-evaluacion-contenido h3 {
+        font-size: 18px !important;
+        line-height: 1.15 !important;
+        margin: 0 !important;
+      }
+
+      #modal-evaluacion-contenido h4 {
+        font-size: 11px !important;
+      }
+
+      /* Resumen superior: más compacto y legible */
+      #modal-evaluacion-contenido .grid.grid-cols-2.sm\\:grid-cols-4,
+      #contenedor-portafolio-impresion .grid.grid-cols-2.sm\\:grid-cols-4 {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        gap: 7px !important;
+        margin-bottom: 10px !important;
+      }
+
+      #modal-evaluacion-contenido .grid.grid-cols-2.sm\\:grid-cols-4 > div,
+      #contenedor-portafolio-impresion .grid.grid-cols-2.sm\\:grid-cols-4 > div {
+        padding: 7px 9px !important;
+        border-radius: 7px !important;
+        min-height: 51px !important;
+      }
+
+      #modal-evaluacion-contenido .grid.grid-cols-2.sm\\:grid-cols-4 p.text-lg,
+      #contenedor-portafolio-impresion .grid.grid-cols-2.sm\\:grid-cols-4 p.text-2xl {
+        font-size: 17px !important;
+        line-height: 1.1 !important;
+        margin-top: 2px !important;
+      }
+
+      /* Evaluador */
+      #modal-evaluacion-contenido input {
+        font-size: 10px !important;
+        padding: 5px 7px !important;
+      }
+
+      /* Contenedor principal de la estación */
+      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden {
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        overflow: visible !important;
+        margin-top: 5px !important;
+      }
+
+      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child {
+        padding: 8px 10px !important;
+        background: #f1f5f9 !important;
+        border-bottom: 1px solid #cbd5e1 !important;
+      }
+
+      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child span:first-child {
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+      }
+
+      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child span:last-child {
+        font-size: 10px !important;
+        padding: 4px 7px !important;
+      }
+
+      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > .p-4 {
+        padding: 9px 10px !important;
+      }
+
+      /* Categorías */
+      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 {
+        margin-bottom: 9px !important;
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+      }
+
+      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 > div:first-child {
+        padding: 5px 7px !important;
+        margin-bottom: 4px !important;
+        background: #eaf0f6 !important;
+        border-left: 3px solid #1c3f66 !important;
+        border-radius: 4px !important;
+      }
+
+      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 > div:first-child span:first-child {
+        font-size: 10px !important;
+        color: #1c3f66 !important;
+        font-weight: 800 !important;
+      }
+
+      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 > div:first-child span:last-child {
+        font-size: 9px !important;
+      }
+
+      /* Cada ítem: compacto pero legible */
+      #modal-evaluacion-contenido .space-y-2 > div.bg-slate-50 {
+        padding: 5px 7px !important;
+        margin-bottom: 3px !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 5px !important;
+        background: #f8fafc !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+
+      #modal-evaluacion-contenido .space-y-2 > div.bg-slate-50 .text-xs {
+        font-size: 10.5px !important;
+        line-height: 1.25 !important;
+      }
+
+      /* Ocultar botones de puntuación y mostrar la calificación */
+      #modal-evaluacion-contenido .hidden.modo-impresion {
+        display: block !important;
+        visibility: visible !important;
+        margin-top: 2px !important;
+        font-size: 9px !important;
+      }
+
+      /* Observaciones */
+      #modal-evaluacion-contenido textarea {
+        display: none !important;
+      }
+
+      #modal-evaluacion-contenido .hidden.modo-impresion.text-xs {
+        display: block !important;
+        padding: 7px !important;
+        min-height: 24px !important;
+        font-size: 10px !important;
+        line-height: 1.35 !important;
+        margin-top: 3px !important;
+      }
+
+      /* Evitar que títulos y bloques importantes queden solos al pie */
+      #modal-evaluacion-contenido h3,
+      #modal-evaluacion-contenido h4,
+      #modal-evaluacion-contenido .border-b,
+      #contenedor-portafolio-impresion h3 {
+        break-after: avoid !important;
+        page-break-after: avoid !important;
+      }
+
+      /* El bloque final del modal no agrega espacio innecesario */
+      #modal-evaluacion-contenido > .flex.justify-between.items-center.pt-4 {
+        display: none !important;
+      }
+    }
+
+    .membrete-impresion {
+      display: none;
+    }
+  `}</style>
+);
+ 
+const MembretePDF = () => (
+  <div className="membrete-impresion">
+    <div className="flex items-center gap-4">
+      <img 
+        src="/Membrete-UNVMHumanas.png" 
+        alt="Membrete UNVM Humanas" 
+        style={{ height: '50px', objectFit: 'contain' }} 
+      />
+    </div>
+    <div className="text-right">
+      <h1 className="text-sm font-bold tracking-widest text-slate-800 uppercase" style={{ fontFamily: 'Georgia, serif' }}>
+        Medicina
+      </h1>
+      <p className="text-[10px] text-slate-500 uppercase tracking-wider">
+        Universidad Nacional de Villa María
+      </p>
+    </div>
+  </div>
+);
+ 
+function EncabezadoECOE({ vista, setVista, totalEstudiantes, totalEstaciones }) {
+  const tabs = [
+    { id: 'mapa', label: 'Mapa de calor' },
+    { id: 'analisis', label: 'Análisis de resultados' },
+    { id: 'portafolio', label: 'Portafolio de estudiante' }
+  ];
+ 
+  return (
+    <div
+      className="rounded-2xl overflow-hidden shadow-sm border border-slate-200 no-imprimir"
+      style={{ background: `linear-gradient(135deg, ${MARCA.navy} 0%, ${MARCA.navyOscuro} 100%)` }}
+    >
+      <div className="px-6 pt-6 pb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-black text-white tracking-tight" style={{ fontFamily: 'Georgia, serif' }}>
+              ECOE
+            </span>
+            <span className="text-xs font-semibold text-slate-200 uppercase tracking-wide">
+              Evaluación Clínica Objetiva Estructurada
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-300 mt-1">
+            {totalEstudiantes} estudiantes · {totalEstaciones} estaciones activas
+          </p>
+        </div>
+      </div>
+ 
+      <div className="bg-black/15 px-4">
+        <div className="flex gap-1">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setVista(t.id)}
+              className={`px-4 py-3 text-xs font-bold uppercase tracking-wide transition-colors border-b-2 ${
+                vista === t.id
+                  ? 'text-white border-white'
+                  : 'text-slate-300 border-transparent hover:text-white hover:border-white/40'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+ 
+function TarjetaMetrica({ etiqueta, valor, detalle, acento }) {
+  return (
+    <div className="bg-white rounded-xl p-4 border border-slate-200">
+      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{etiqueta}</p>
+      <p className={`text-2xl font-black mt-1 ${acento || 'text-slate-800'}`}>{valor}</p>
+      {detalle && <p className="text-[11px] text-slate-400 mt-0.5">{detalle}</p>}
+    </div>
+  );
+}
+ 
+function VistaAnalisisResultados({ datosPorEstacion }) {
+  const hayDatos = datosPorEstacion.some((d) => d.evaluados > 0);
+ 
+  const promedioGeneral = useMemo(() => {
+    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    if (conDatos.length === 0) return 0;
+    return Math.round(conDatos.reduce((acc, d) => acc + d.promedio, 0) / conDatos.length);
+  }, [datosPorEstacion]);
+ 
+  const estacionMasDificil = useMemo(() => {
+    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    if (conDatos.length === 0) return null;
+    return conDatos.reduce((min, d) => (d.promedio < min.promedio ? d : min), conDatos[0]);
+  }, [datosPorEstacion]);
+ 
+  const estacionMasFacil = useMemo(() => {
+    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    if (conDatos.length === 0) return null;
+    return conDatos.reduce((max, d) => (d.promedio > max.promedio ? d : max), conDatos[0]);
+  }, [datosPorEstacion]);
+ 
+  const tasaAprobacion = useMemo(() => {
+    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    if (conDatos.length === 0) return 0;
+    const promedioAprobado = conDatos.filter((d) => d.promedio >= UMBRAL_APROBACION_ESTACION).length;
+    return Math.round((promedioAprobado / conDatos.length) * 100);
+  }, [datosPorEstacion]);
+ 
+  if (!hayDatos) {
+    return (
+      <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
+        <p className="text-xs font-semibold text-slate-500">
+          Todavía no hay evaluaciones cargadas para generar el análisis de resultados.
+        </p>
+      </div>
+    );
+  }
+ 
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <TarjetaMetrica etiqueta="Rendimiento promedio" valor={`${promedioGeneral}%`} />
+        <TarjetaMetrica
+          etiqueta="Tasa de estaciones aprobadas"
+          valor={`${tasaAprobacion}%`}
+          acento={tasaAprobacion >= 70 ? 'text-emerald-600' : 'text-rose-600'}
+        />
+        <TarjetaMetrica
+          etiqueta="Estación más difícil"
+          valor={estacionMasDificil ? `${estacionMasDificil.promedio}%` : '—'}
+          detalle={estacionMasDificil?.estacion}
+          acento="text-rose-600"
+        />
+        <TarjetaMetrica
+          etiqueta="Estación más fácil"
+          valor={estacionMasFacil ? `${estacionMasFacil.promedio}%` : '—'}
+          detalle={estacionMasFacil?.estacion}
+          acento="text-emerald-600"
+        />
+      </div>
+ 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl p-5 border border-slate-200">
+          <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
+            Rendimiento por estación (%)
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <RadarChart data={datosPorEstacion} outerRadius="75%">
+              <PolarGrid stroke="#e2e8f0" />
+              <PolarAngleAxis dataKey="estacion" tick={{ fontSize: 10, fill: '#475569' }} />
+              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: '#94a3b8' }} />
+              <Radar
+                name="Promedio"
+                dataKey="promedio"
+                stroke={MARCA.navy}
+                fill={MARCA.teal}
+                fillOpacity={0.5}
+              />
+              <Tooltip formatter={(v) => `${v}%`} />
+            </RadarChart>
+          </ResponsiveContainer>
+        </div>
+ 
+        <div className="bg-white rounded-xl p-5 border border-slate-200">
+          <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
+            Comparativa de puntuaciones por estación
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={datosPorEstacion} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="estacion" tick={{ fontSize: 9, fill: '#475569' }} interval={0} angle={-20} textAnchor="end" height={60} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+              <Tooltip formatter={(v) => `${v}%`} />
+              <Bar dataKey="promedio" radius={[6, 6, 0, 0]}>
+                {datosPorEstacion.map((d, i) => (
+                  <Cell key={i} fill={colorBarra(d.promedio)} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+ 
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100">
+          <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Resumen por estación</h3>
+        </div>
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <th className="p-3">Estación</th>
+              <th className="p-3 text-center">Evaluados</th>
+              <th className="p-3 text-center">Promedio</th>
+              <th className="p-3 text-center">Estado</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {datosPorEstacion.map((d, i) => {
+              const banda = obtenerBanda(d.promedio);
+              return (
+                <tr key={i}>
+                  <td className="p-3 font-semibold text-slate-700">{d.estacion}</td>
+                  <td className="p-3 text-center text-slate-500">{d.evaluados}</td>
+                  <td className="p-3 text-center font-bold text-slate-700">{d.evaluados > 0 ? `${d.promedio}%` : '—'}</td>
+                  <td className="p-3 text-center">
+                    {d.evaluados > 0 ? (
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${banda.bg} ${banda.text}`}>
+                        {banda.nombre}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-300">Sin datos</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+ 
+function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstudiante, dniSeleccionado, setDniSeleccionado }) {
+  const estudiante = listaEstudiantes.find((e) => e.dni === dniSeleccionado) || null;
+ 
+  const lineaDeTiempo = useMemo(() => {
+    if (!estudiante) return [];
+    return estudiante.estaciones
+      .map((estacion) => resultadosMap[`${estudiante.dni}__${estacion}`])
+      .filter(Boolean)
+      .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+  }, [estudiante, resultadosMap]);
+ 
+  const datosEvolucion = useMemo(
+    () => lineaDeTiempo.map((r, i) => ({ nombre: r.estacion, orden: i + 1, porcentaje: r.porcentaje })),
+    [lineaDeTiempo]
+  );
+ 
+  const resumen = estudiante ? calcularResumenEstudiante(estudiante) : null;
+ 
+  const descargarPortafolioPDF = () => {
+    const tituloOriginal = document.title;
+    if (estudiante) {
+      document.title = `Portafolio_${estudiante.alumno.replace(/\s+/g, '_')}_${estudiante.dni}`;
+    }
+    const el = document.getElementById('contenedor-portafolio-impresion');
+    if (el) el.classList.add('modo-impresion');
+    
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print();
+        setTimeout(() => {
+          if (el) el.classList.remove('modo-impresion');
+          document.title = tituloOriginal;
+        }, 100);
+      });
+    });
+  };
+ 
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl p-5 border border-slate-200 no-imprimir flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-2">
+            Seleccionar estudiante
+          </label>
+          <select
+            value={dniSeleccionado || ''}
+            onChange={(e) => setDniSeleccionado(e.target.value)}
+            className="w-full sm:w-96 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+          >
+            <option value="">— Elegí un estudiante —</option>
+            {listaEstudiantes.map((e) => (
+              <option key={e.dni} value={e.dni}>
+                {e.alumno} (DNI: {e.dni})
+              </option>
+            ))}
+          </select>
+        </div>
+ 
+        {estudiante && (
+          <button
+            onClick={descargarPortafolioPDF}
+            className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors flex items-center gap-2 shadow-sm self-end sm:self-auto no-imprimir"
+          >
+            📊 Descargar Portafolio Completo en PDF
+          </button>
+        )}
+      </div>
+ 
+      {!estudiante ? (
+        <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
+          <p className="text-xs font-semibold text-slate-500">Elegí un estudiante para ver su portafolio.</p>
+        </div>
+      ) : (
+        <div id="contenedor-portafolio-impresion" className="space-y-6 p-1">
+          <MembretePDF />
+
+          <div className="hidden modo-impresion mb-4 pb-3 border-b border-slate-300">
+            <h2 className="text-xl font-bold text-slate-900">Portafolio ECOE - {estudiante.alumno}</h2>
+            <p className="text-xs text-slate-600">DNI: {estudiante.dni} · Día: {estudiante.dia || 'S/D'}</p>
+          </div>
+ 
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <TarjetaMetrica etiqueta="Promedio histórico" valor={`${resumen.promedio}%`} />
+            <TarjetaMetrica etiqueta="Estaciones evaluadas" valor={`${resumen.evaluadas}/${resumen.totalAsignadas}`} />
+            <TarjetaMetrica etiqueta="Estaciones aprobadas" valor={resumen.aprobadas} detalle={`mínimo ${resumen.minAprobar}`} acento="text-emerald-600" />
+            <TarjetaMetrica
+              etiqueta="Resultado ECOE"
+              valor={resumen.resultadoFinal}
+              acento={
+                resumen.resultadoFinal === 'Aprobado'
+                  ? 'text-emerald-600'
+                  : resumen.resultadoFinal === 'Desaprobado'
+                  ? 'text-rose-600'
+                  : 'text-slate-500'
+              }
+            />
+          </div>
+ 
+          <div className="bg-white rounded-xl p-5 border border-slate-200">
+            <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Evolución de rendimiento (%)</h3>
+            {datosEvolucion.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">Este estudiante todavía no tiene estaciones evaluadas.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={datosEvolucion} margin={{ top: 8, right: 16, left: -20, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="nombre" tick={{ fontSize: 9, fill: '#475569' }} interval={0} angle={-20} textAnchor="end" height={60} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                  <Tooltip formatter={(v) => `${v}%`} />
+                  <Line type="monotone" dataKey="porcentaje" stroke={MARCA.navy} strokeWidth={2} dot={{ r: 4, fill: MARCA.teal }} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+ 
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100">
+              <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Línea de tiempo de evaluación</h3>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {lineaDeTiempo.length === 0 ? (
+                <p className="text-xs text-slate-400 italic p-5">Sin evaluaciones registradas todavía.</p>
+              ) : (
+                lineaDeTiempo.map((r, i) => {
+                  const banda = obtenerBanda(r.porcentaje);
+                  return (
+                    <div key={i} className="flex items-center justify-between gap-4 p-4">
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">{r.estacion}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {formatearFecha(r.timestamp)} · Evaluador: {r.evaluador || 'Sin registrar'}
+                        </p>
+                        {r.observaciones && (
+                          <p className="text-[10px] text-slate-500 mt-1 italic">"{r.observaciones}"</p>
+                        )}
+                      </div>
+                      <span className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap ${banda.bg} ${banda.text}`}>
+                        {r.porcentaje}% · Nota {r.notaEscala}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+ 
+export default function ECOE() {
+  const [vista, setVista] = useState('mapa'); 
+ 
+  const [ecoeDatos, setEcoeDatos] = useState([]);           
+  const [estacionesConfigRaw, setEstacionesConfigRaw] = useState([]); 
+  const [asignacionesRaw, setAsignacionesRaw] = useState([]);         
+  const [loadingEcoe, setLoadingEcoe] = useState(true);
+  const [errorCarga, setErrorCarga] = useState(null);
+ 
+  const [searchEcoe, setSearchEcoe] = useState('');
+  const [filtroEstacionEcoe, setFiltroEstacionEcoe] = useState('todas');
+  const [filtroDiaEcoe, setFiltroDiaEcoe] = useState('todos');
+ 
+  const [estudianteSeleccionado, setEstudianteSeleccionado] = useState(null);
+  const [estacionSeleccionada, setEstacionSeleccionada] = useState(null); 
+  const [evaluadorActual, setEvaluadorActual] = useState('');
+  const [guardando, setGuardando] = useState(false);
+ 
+  const [dniPortafolio, setDniPortafolio] = useState('');
+ 
+  const [colaPendientes, setColaPendientes] = useState(() => {
+    try {
+      const guardado = localStorage.getItem('ecoe_cola_offline');
+      return guardado ? JSON.parse(guardado) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [sincronizando, setSincronizando] = useState(false);
+  const [onlineStatus, setOnlineStatus] = useState(navigator.onLine);
+ 
+  useEffect(() => {
+    const handleOnline = () => setOnlineStatus(true);
+    const handleOffline = () => setOnlineStatus(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+ 
+  useEffect(() => {
+    try {
+      localStorage.setItem('ecoe_cola_offline', JSON.stringify(colaPendientes));
+    } catch (e) {
+      console.error("Error guardando en localStorage:", e);
+    }
+  }, [colaPendientes]);
+ 
+  useEffect(() => {
+    if (onlineStatus && colaPendientes.length > 0 && !sincronizando) {
+      sincronizarCola();
+    }
+  }, [onlineStatus, colaPendientes]);
+ 
+  const sincronizarCola = async () => {
+    if (colaPendientes.length === 0 || sincronizando) return;
+    setSincronizando(true);
+ 
+    const pendientesActuales = [...colaPendientes];
+    const noSincronizados = [];
+ 
+    for (const item of pendientesActuales) {
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        });
+      } catch (err) {
+        console.error("Fallo al sincronizar ítem:", err);
+        noSincronizados.push(item);
+      }
+    }
+ 
+    setColaPendientes(noSincronizados);
+    setSincronizando(false);
+    cargarDatos();
+  };
+ 
+  const cargarDatos = async () => {
+    setLoadingEcoe(true);
+    setErrorCarga(null);
+    try {
+      const [resultados, config, asignaciones] = await Promise.all([
+        fetch(`${API_URL}?vista=ecoe`).then((r) => r.json()),
+        fetch(`${API_URL}?vista=estaciones`).then((r) => r.json()),
+        fetch(`${API_URL}?vista=asignaciones`).then((r) => r.json())
+      ]);
+      setEcoeDatos(Array.isArray(resultados) ? resultados : []);
+      setEstacionesConfigRaw(Array.isArray(config) ? config : []);
+      setAsignacionesRaw(Array.isArray(asignaciones) ? asignaciones : []);
+    } catch (err) {
+      console.error("Error cargando datos ECOE:", err);
+      setErrorCarga("No se pudieron cargar los datos. Verificá la conexión con la hoja de cálculo.");
+    } finally {
+      setLoadingEcoe(false);
+    }
+  };
+ 
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+ 
+  const estacionesConfigMap = useMemo(() => {
+    const map = {};
+    estacionesConfigRaw.forEach((item) => {
+      const estacion = item.Estacion || item.estacion;
+      if (!estacion) return;
+      const catNombre = item.Categoria || item.categoria || 'General';
+      const puntajeMaxItem = parseFloat(item.Puntaje_Max || item.puntaje_max || 0) || 0;
+ 
+      if (!map[estacion]) map[estacion] = { nombre: estacion, categorias: {}, puntajeMax: 0 };
+      if (!map[estacion].categorias[catNombre]) {
+        map[estacion].categorias[catNombre] = {
+          nombre: catNombre,
+          items: [],
+          puntajeMaxCategoria: 0,
+          orden: parseFloat(item.Orden_Categoria || item.orden_categoria || 0) || 0
+        };
+      }
+ 
+      map[estacion].categorias[catNombre].items.push({
+        codigo: item.Item_Codigo || item.item_codigo || '',
+        descripcion: item.Item_Descripcion || item.item_descripcion || '',
+        puntajeMax: puntajeMaxItem,
+        orden: parseFloat(item.Orden_Item || item.orden_item || 0) || 0
+      });
+      map[estacion].categorias[catNombre].puntajeMaxCategoria += puntajeMaxItem;
+      map[estacion].puntajeMax += puntajeMaxItem;
+    });
+ 
+    Object.values(map).forEach((est) => {
+      est.categorias = Object.values(est.categorias).sort((a, b) => a.orden - b.orden);
+      est.categorias.forEach((cat) => cat.items.sort((a, b) => a.orden - b.orden));
+    });
+ 
+    return map;
+  }, [estacionesConfigRaw]);
+ 
+  const estudiantesMap = useMemo(() => {
+    const map = {};
+    asignacionesRaw.forEach((a) => {
+      const dni = (a.DNI_Estudiante || a.dni || '').toString();
+      const alumno = a.Nombre_Estudiante || a.alumno || 'Sin Nombre';
+      const dia = a.Dia || a.dia || '';
+      const estacion = a.Estacion || a.estacion;
+      if (!dni || !estacion) return;
+ 
+      if (!map[dni]) map[dni] = { dni, alumno, dia, estaciones: [] };
+      if (!map[dni].estaciones.includes(estacion)) map[dni].estaciones.push(estacion);
+    });
+    return map;
+  }, [asignacionesRaw]);
+ 
+  const listaEstudiantes = useMemo(
+    () => Object.values(estudiantesMap).sort((a, b) => a.alumno.localeCompare(b.alumno)),
+    [estudiantesMap]
+  );
+ 
+  const listaEstacionesTotales = useMemo(() => {
+    const set = new Set();
+    asignacionesRaw.forEach((a) => {
+      const estacion = a.Estacion || a.estacion;
+      if (estacion) set.add(estacion);
+    });
+    return Array.from(set).sort();
+  }, [asignacionesRaw]);
+ 
+  const resultadosMap = useMemo(() => {
+    const map = {};
+    ecoeDatos.forEach((item) => {
+      const dni = (item.DNI_Estudiante || item.dni || '').toString();
+      const estacion = item.Estacion || item.estacion;
+      if (!dni || !estacion) return;
+ 
+      const puntaje = parseFloat(item.Puntaje_Total || item.puntaje || 0) || 0;
+      const puntajeMax = parseFloat(item.Puntaje_Max_Estacion || item.puntajeMax || 100) || 100;
+      const porcentaje = puntajeMax > 0 ? Math.round((puntaje / puntajeMax) * 100) : 0;
+      const notaEscala = obtenerNotaEscala(porcentaje);
+ 
+      let detalle = {};
+      try {
+        const crudo = item.Detalle_Items || item.detalleItems;
+        detalle = crudo ? JSON.parse(crudo) : {};
+      } catch {
+        detalle = {};
+      }
+ 
+      map[`${dni}__${estacion}`] = {
+        dni,
+        estacion,
+        puntaje,
+        puntajeMax,
+        porcentaje,
+        notaEscala,
+        estado: porcentaje >= UMBRAL_APROBACION_ESTACION ? 'Aprobado' : 'Desaprobado',
+        evaluador: item.Evaluador || item.evaluador || '',
+        observaciones: item.Observaciones || item.observaciones || '',
+        detalle,
+        timestamp: item.Timestamp || ''
+      };
+    });
+    return map;
+  }, [ecoeDatos]);
+ 
+  const datosPorEstacion = useMemo(() => {
+    return listaEstacionesTotales.map((estacion) => {
+      const resultados = Object.values(resultadosMap).filter((r) => r.estacion === estacion);
+      const promedio =
+        resultados.length > 0
+          ? Math.round(resultados.reduce((acc, r) => acc + r.porcentaje, 0) / resultados.length)
+          : 0;
+      return { estacion, promedio, evaluados: resultados.length };
+    });
+  }, [listaEstacionesTotales, resultadosMap]);
+ 
+  const estudiantesFiltrados = listaEstudiantes.filter((est) => {
+    const matchS =
+      !searchEcoe ||
+      normalizarTexto(est.alumno).includes(normalizarTexto(searchEcoe)) ||
+      est.dni.toString().includes(searchEcoe);
+    const matchDia = filtroDiaEcoe === 'todos' || normalizarTexto(est.dia) === normalizarTexto(filtroDiaEcoe);
+    return matchS && matchDia;
+  });
+ 
+  const columnasEstaciones = filtroEstacionEcoe === 'todas' ? listaEstacionesTotales : [filtroEstacionEcoe];
+ 
+  const obtenerEstadoCelda = (resultado, asignada) => {
+    if (!asignada) {
+      return { color: 'bg-slate-50 text-slate-300 border border-slate-100', label: '—', notaLabel: '' };
+    }
+    if (!resultado) {
+      return { color: 'bg-blue-100 text-blue-800 font-medium', label: 'No iniciado', notaLabel: '' };
+    }
+    const banda = obtenerBanda(resultado.porcentaje);
+    return {
+      color: `${banda.bg} ${banda.text} font-bold`,
+      label: `${resultado.porcentaje}%`,
+      notaLabel: `Nota: ${resultado.notaEscala}`
+    };
+  };
+ 
+  const calcularResumenEstudiante = (est) => {
+    const estacionesAsignadas = est.estaciones || [];
+    let evaluadas = 0;
+    let aprobadas = 0;
+    let sumaPorcentajes = 0;
+ 
+    estacionesAsignadas.forEach((estacion) => {
+      const r = resultadosMap[`${est.dni}__${estacion}`];
+      if (r) {
+        evaluadas += 1;
+        sumaPorcentajes += r.porcentaje;
+        if (r.porcentaje >= UMBRAL_APROBACION_ESTACION) aprobadas += 1;
+      }
+    });
+ 
+    const totalAsignadas = estacionesAsignadas.length;
+    const promedio = evaluadas > 0 ? Math.round(sumaPorcentajes / evaluadas) : 0;
+    const minAprobar = Math.ceil(totalAsignadas * PORCENTAJE_MIN_ESTACIONES_APROBADAS);
+    const completo = evaluadas === totalAsignadas && totalAsignadas > 0;
+ 
+    let resultadoFinal = 'Incompleto';
+    if (completo) {
+      resultadoFinal = aprobadas >= minAprobar && promedio >= PROMEDIO_MIN_EXAMEN ? 'Aprobado' : 'Desaprobado';
+    }
+ 
+    return { evaluadas, aprobadas, totalAsignadas, promedio, minAprobar, resultadoFinal };
+  };
+ 
+  const abrirEstudiante = (est, estacionInicial) => {
+    const estacionesDetalle = {};
+    est.estaciones.forEach((estacion) => {
+      const config = estacionesConfigMap[estacion];
+      const resultado = resultadosMap[`${est.dni}__${estacion}`];
+      const itemsPuntaje = {};
+ 
+      if (config) {
+        config.categorias.forEach((cat) => {
+          cat.items.forEach((item) => {
+            itemsPuntaje[item.codigo] = normalizarNota(resultado?.detalle?.[item.codigo]);
+          });
+        });
+      }
+ 
+      estacionesDetalle[estacion] = {
+        itemsPuntaje,
+        observaciones: resultado?.observaciones || ''
+      };
+    });
+ 
+    setEvaluadorActual('');
+    setEstacionSeleccionada(estacionInicial || est.estaciones[0] || null);
+    setEstudianteSeleccionado({ ...est, estacionesDetalle });
+  };
+ 
+  const puntajeEstacion = (estacion, itemsPuntaje) => {
+    const config = estacionesConfigMap[estacion];
+    if (!config) return { puntaje: 0, puntajeMax: 0, porcentaje: 0, notaEscala: 2 };
+    let puntaje = 0;
+    config.categorias.forEach((cat) => {
+      cat.items.forEach((item) => {
+        const nota = itemsPuntaje[item.codigo] ?? 0;
+        puntaje += (nota / NOTA_MAXIMA_ITEM) * item.puntajeMax;
+      });
+    });
+    const puntajeMax = config.puntajeMax || 100;
+    puntaje = Math.round(puntaje * 10) / 10;
+    const porcentaje = puntajeMax > 0 ? Math.round((puntaje / puntajeMax) * 100) : 0;
+    const notaEscala = obtenerNotaEscala(porcentaje);
+    return { puntaje, puntajeMax, porcentaje, notaEscala };
+  };
+ 
+  const puntajeCategoria = (cat, itemsPuntaje) => {
+    const puntaje = cat.items.reduce(
+      (acc, item) => acc + ((itemsPuntaje[item.codigo] ?? 0) / NOTA_MAXIMA_ITEM) * item.puntajeMax,
+      0
+    );
+    return Math.round(puntaje * 10) / 10;
+  };
+ 
+  const setNotaItem = (estacion, codigoItem, nota) => {
+    setEstudianteSeleccionado((prev) => {
+      if (!prev) return prev;
+      const detalleEstacion = prev.estacionesDetalle[estacion];
+      const nuevosItems = { ...detalleEstacion.itemsPuntaje, [codigoItem]: nota };
+      return {
+        ...prev,
+        estacionesDetalle: {
+          ...prev.estacionesDetalle,
+          [estacion]: { ...detalleEstacion, itemsPuntaje: nuevosItems }
+        }
+      };
+    });
+  };
+ 
+  const setObservacionEstacion = (estacion, texto) => {
+    setEstudianteSeleccionado((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        estacionesDetalle: {
+          ...prev.estacionesDetalle,
+          [estacion]: { ...prev.estacionesDetalle[estacion], observaciones: texto }
+        }
+      };
+    });
+  };
+ 
+  const guardarFichaEstudiante = async () => {
+    if (!estudianteSeleccionado) return;
+    if (!evaluadorActual.trim()) {
+      alert('Ingresá el nombre del evaluador/a antes de guardar.');
+      return;
+    }
+ 
+    setGuardando(true);
+    const { dni, alumno, dia, estacionesDetalle } = estudianteSeleccionado;
+ 
+    for (const estacion of Object.keys(estacionesDetalle)) {
+      const detalle = estacionesDetalle[estacion];
+      const { puntaje, puntajeMax, porcentaje } = puntajeEstacion(estacion, detalle.itemsPuntaje);
+      const estado = porcentaje >= UMBRAL_APROBACION_ESTACION ? 'Aprobado' : 'Desaprobado';
+ 
+      const nuevoRegistro = {
+        accion: 'guardar_ecoe',
+        idEvaluacion: `${dni}_${estacion}`,
+        dni,
+        nombre: alumno,
+        estacion,
+        dia,
+        puntajeTotal: puntaje,
+        puntajeMaxEstacion: puntajeMax,
+        porcentajeLogro: porcentaje,
+        estado,
+        evaluador: evaluadorActual.trim(),
+        detalleItems: JSON.stringify(detalle.itemsPuntaje),
+        observaciones: detalle.observaciones || '',
+        timestamp: new Date().toISOString()
+      };
+ 
+      setEcoeDatos((prev) => {
+        const index = prev.findIndex(
+          (p) => String(p.DNI_Estudiante || p.dni) === String(dni) && (p.Estacion || p.estacion) === estacion
+        );
+        const filaActualizada = {
+          DNI_Estudiante: dni,
+          Nombre_Estudiante: alumno,
+          Estacion: estacion,
+          Evaluador: evaluadorActual.trim(),
+          Puntaje_Total: puntaje,
+          Puntaje_Max_Estacion: puntajeMax,
+          Porcentaje_Logro: porcentaje,
+          Estado: estado,
+          Detalle_Items: JSON.stringify(detalle.itemsPuntaje),
+          Observaciones: detalle.observaciones || '',
+          Timestamp: nuevoRegistro.timestamp
+        };
+        if (index >= 0) {
+          const copia = [...prev];
+          copia[index] = { ...copia[index], ...filaActualizada };
+          return copia;
+        }
+        return [...prev, filaActualizada];
+      });
+ 
+      setColaPendientes((prev) => [...prev, nuevoRegistro]);
+ 
+      if (navigator.onLine) {
+        try {
+          await fetch(API_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(nuevoRegistro)
+          });
+        } catch (err) {
+          console.log('Guardado localmente por fallo de red:', err);
+        }
+      }
+    }
+ 
+    setGuardando(false);
+    alert('¡Evaluación guardada con éxito!');
+    setEstudianteSeleccionado(null);
+  };
+ 
+  const descargarPDFEstacionActual = () => {
+    if (!estudianteSeleccionado || !estacionSeleccionada) {
+      alert('Seleccioná una estación antes de descargar el PDF.');
+      return;
+    }
+
+    const tituloOriginal = document.title;
+    const nombreArchivo = `Estacion_${estacionSeleccionada.replace(/\s+/g, '_')}_${estudianteSeleccionado.alumno.replace(/\s+/g, '_')}`;
+    const modalContent = document.getElementById('modal-evaluacion-contenido');
+
+    document.title = nombreArchivo;
+
+    if (modalContent) {
+      modalContent.classList.add('modo-impresion');
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print();
+        setTimeout(() => {
+          if (modalContent) modalContent.classList.remove('modo-impresion');
+          document.title = tituloOriginal;
+        }, 100);
+      });
+    });
+  };
+ 
+  return (
+    <div className="space-y-6 p-4 sm:p-6 rounded-2xl" style={{ background: MARCA.fondo }}>
+      <EstilosImpresion />
+      <EncabezadoECOE
+        vista={vista}
+        setVista={setVista}
+        totalEstudiantes={listaEstudiantes.length}
+        totalEstaciones={listaEstacionesTotales.length}
+      />
+ 
+      <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 no-imprimir">
+        <p className="text-xs text-slate-500">Gestión de evaluaciones clínicas estructuradas por estación.</p>
+        <div className="flex items-center gap-3">
+          {onlineStatus ? (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Online
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200">
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span> Sin Conexión (Modo Offline Activo)
+            </span>
+          )}
+          {colaPendientes.length > 0 && (
+            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+              Pendientes de sincronizar: {colaPendientes.length}
+            </span>
+          )}
+        </div>
+      </div>
+ 
+      {errorCarga && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl p-4 no-imprimir">
+          {errorCarga}
+        </div>
+      )}
+ 
+      {loadingEcoe ? (
+        <div className="bg-white rounded-xl p-12 text-center border border-slate-200 no-imprimir">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+          <p className="text-xs font-semibold text-slate-500">Cargando datos de ECOE...</p>
+        </div>
+      ) : vista === 'analisis' ? (
+        <VistaAnalisisResultados datosPorEstacion={datosPorEstacion} />
+      ) : vista === 'portafolio' ? (
+        <VistaPortafolio
+          listaEstudiantes={listaEstudiantes}
+          resultadosMap={resultadosMap}
+          calcularResumenEstudiante={calcularResumenEstudiante}
+          dniSeleccionado={dniPortafolio}
+          setDniSeleccionado={setDniPortafolio}
+        />
+      ) : (
+        <>
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-wrap items-center gap-4 text-xs no-imprimir">
+            <span className="font-bold text-slate-600 uppercase tracking-wider">Leyenda:</span>
+            {BANDAS.map((b, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <span className={`w-3 h-3 rounded ${b.bg} inline-block`}></span>
+                <span>
+                  {b.nombre} {b.min > 0 ? `(≥${b.min}%)` : '(<60%)'}
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-200 inline-block"></span><span>Asignada, no iniciado</span></div>
+            <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-slate-50 border border-slate-200 inline-block"></span><span>No le corresponde esta estación</span></div>
+          </div>
+ 
+          <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4 no-imprimir">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Buscar Estudiante</label>
+                <input
+                  type="text"
+                  placeholder="Nombre o DNI..."
+                  value={searchEcoe}
+                  onChange={(e) => setSearchEcoe(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Filtrar por Día</label>
+                <select
+                  value={filtroDiaEcoe}
+                  onChange={(e) => setFiltroDiaEcoe(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  <option value="todos">Todos los días (Jueves, Viernes, Sábado)</option>
+                  <option value="jueves">Jueves</option>
+                  <option value="viernes">Viernes</option>
+                  <option value="sabado">Sábado</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Filtrar por Estación</label>
+                <select
+                  value={filtroEstacionEcoe}
+                  onChange={(e) => setFiltroEstacionEcoe(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  <option value="todas">Todas las estaciones</option>
+                  {listaEstacionesTotales.map((est) => (
+                    <option key={est} value={est}>{est}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+ 
+          {estudiantesFiltrados.length === 0 ? (
+            <div className="bg-white rounded-xl p-12 text-center border border-slate-200 no-imprimir">
+              <p className="text-xs font-semibold text-slate-500">No se encontraron estudiantes con los filtros seleccionados.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden no-imprimir">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="p-3 sticky left-0 bg-slate-50 z-10 min-w-[200px]">Estudiante / Día</th>
+                      {columnasEstaciones.map((est, i) => (
+                        <th key={i} className="p-3 text-center min-w-[120px] truncate max-w-[140px]" title={est}>
+                          {est}
+                        </th>
+                      ))}
+                      <th className="p-3 text-center min-w-[90px]">Resultado</th>
+                      <th className="p-3 text-center">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {estudiantesFiltrados.map((est, idx) => {
+                      const resumen = calcularResumenEstudiante(est);
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3 sticky left-0 bg-white font-bold text-slate-800 z-10 shadow-sm">
+                            {est.alumno}
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-normal text-slate-400">DNI: {est.dni}</span>
+                              <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold uppercase">{est.dia || 'S/D'}</span>
+                            </div>
+                          </td>
+                          {columnasEstaciones.map((estacion, eIdx) => {
+                            const asignada = est.estaciones.includes(estacion);
+                            const resultado = resultadosMap[`${est.dni}__${estacion}`];
+                            const estado = obtenerEstadoCelda(resultado, asignada);
+                            return (
+                              <td key={eIdx} className="p-2 text-center">
+                                <div
+                                  className={`rounded-lg py-1.5 px-2 text-[11px] shadow-sm flex flex-col items-center justify-center gap-0.5 ${asignada ? 'cursor-pointer hover:scale-105' : ''} transition-transform ${estado.color}`}
+                                  title={asignada ? `${estacion}: ${estado.label} (${estado.notaLabel}) — click para evaluar` : `${estacion}: no asignada`}
+                                  onClick={() => asignada && abrirEstudiante(est, estacion)}
+                                >
+                                  <span>{estado.label}</span>
+                                  {estado.notaLabel && (
+                                    <span className="text-[10px] opacity-95 font-semibold bg-black/10 px-1.5 rounded">
+                                      {estado.notaLabel}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                          <td className="p-2 text-center">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
+                                resumen.resultadoFinal === 'Aprobado'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : resumen.resultadoFinal === 'Desaprobado'
+                                  ? 'bg-rose-50 text-rose-700'
+                                  : 'bg-slate-100 text-slate-500'
+                              }`}
+                            >
+                              {resumen.evaluadas}/{resumen.totalAsignadas} · {resumen.resultadoFinal}
+                            </span>
+                          </td>
+                          <td className="p-2 text-center">
+                            <button
+                              onClick={() => abrirEstudiante(est)}
+                              className="bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold px-3 py-1 rounded-lg text-xs transition-colors"
+                            >
+                              Evaluar estudiante
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+ 
+      {estudianteSeleccionado && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 contenedor-modal-ecoe">
+          <div id="modal-evaluacion-contenido" className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
+            
+            <MembretePDF />
+
+            <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+              <div>
+                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Evaluación Clínica Individual - ECOE</span>
+                <h3 className="text-lg font-black text-slate-900">{estudianteSeleccionado.alumno}</h3>
+                <p className="text-xs text-slate-500">DNI: {estudianteSeleccionado.dni} · {estudianteSeleccionado.dia || 'Día sin definir'}</p>
+              </div>
+              <button
+                onClick={() => setEstudianteSeleccionado(null)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold w-8 h-8 rounded-full flex items-center justify-center transition-colors no-imprimir"
+              >
+                ✕
+              </button>
+            </div>
+ 
+            {(() => {
+              const resumen = calcularResumenEstudiante(estudianteSeleccionado);
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Evaluadas</p>
+                    <p className="text-lg font-black text-slate-800">{resumen.evaluadas}/{resumen.totalAsignadas}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Aprobadas</p>
+                    <p className="text-lg font-black text-slate-800">{resumen.aprobadas} <span className="text-xs font-medium text-slate-400">(mín. {resumen.minAprobar})</span></p>
+                  </div>
+                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Promedio</p>
+                    <p className="text-lg font-black text-slate-800">{resumen.promedio}%</p>
+                  </div>
+                  <div className={`rounded-xl p-3 border ${resumen.resultadoFinal === 'Aprobado' ? 'bg-emerald-50 border-emerald-100' : resumen.resultadoFinal === 'Desaprobado' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase">Resultado ECOE</p>
+                    <p className="text-lg font-black text-slate-800">{resumen.resultadoFinal}</p>
+                  </div>
+                </div>
+              );
+            })()}
+ 
+            <div>
+              <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Evaluador/a (Docente a cargo)</label>
+              <input
+                type="text"
+                placeholder="Nombre y apellido del docente evaluador"
+                value={evaluadorActual}
+                onChange={(e) => setEvaluadorActual(e.target.value)}
+                className="w-full sm:w-96 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+              />
+            </div>
+ 
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider no-imprimir">Estación a evaluar</h4>
+              <div className="flex flex-wrap gap-2 no-imprimir">
+                {estudianteSeleccionado.estaciones.map((estacion, idx) => {
+                  const detalle = estudianteSeleccionado.estacionesDetalle[estacion];
+                  const { porcentaje, notaEscala } = puntajeEstacion(estacion, detalle.itemsPuntaje);
+                  const activa = estacionSeleccionada === estacion;
+                  const aprobada = porcentaje >= UMBRAL_APROBACION_ESTACION;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setEstacionSeleccionada(estacion)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
+                        activa
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>{estacion}</span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                          activa ? 'bg-white/20 text-white' : aprobada ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                        }`}
+                      >
+                        {porcentaje}% (Nota: {notaEscala})
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+ 
+              {estacionSeleccionada && (() => {
+                const estacion = estacionSeleccionada;
+                const config = estacionesConfigMap[estacion];
+                const detalle = estudianteSeleccionado.estacionesDetalle[estacion];
+                const { puntaje, puntajeMax, porcentaje, notaEscala } = puntajeEstacion(estacion, detalle.itemsPuntaje);
+                const aprobada = porcentaje >= UMBRAL_APROBACION_ESTACION;
+ 
+                return (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                      <span className="text-xs font-bold text-slate-800">{estacion}</span>
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${aprobada ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                        {puntaje}/{puntajeMax} pts · {porcentaje}% — <span className="underline">Nota: {notaEscala}</span>
+                      </span>
+                    </div>
+ 
+                    <div className="p-4 space-y-4">
+                      {!config ? (
+                        <p className="text-xs text-slate-400 italic">
+                          No hay lista de cotejo cargada para "{estacion}" en la hoja Estaciones_ConfigECOE.
+                        </p>
+                      ) : (
+                        <>
+                          {config.categorias.map((cat, catIdx) => {
+                            const puntajeCat = puntajeCategoria(cat, detalle.itemsPuntaje);
+                            return (
+                              <div key={catIdx} className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{cat.nombre}</span>
+                                  <span className="text-[10px] font-semibold text-slate-400">{puntajeCat}/{cat.puntajeMaxCategoria} pts</span>
+                                </div>
+                                <div className="space-y-2">
+                                  {cat.items.map((item, itemIdx) => {
+                                    const nota = detalle.itemsPuntaje[item.codigo] ?? 0;
+                                    const puntosItem = Math.round(((nota / NOTA_MAXIMA_ITEM) * item.puntajeMax) * 10) / 10;
+                                    return (
+                                      <div key={itemIdx} className="bg-slate-50 rounded-lg px-3 py-2 space-y-1.5">
+                                        <div className="flex justify-between items-start gap-2">
+                                          <span className="flex-1 text-xs text-slate-700">
+                                            {item.codigo ? <span className="font-semibold text-slate-500 mr-1">{item.codigo}</span> : null}
+                                            {item.descripcion}
+                                          </span>
+                                          <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{puntosItem}/{item.puntajeMax} pts</span>
+                                        </div>
+                                        <div className="flex gap-1 no-imprimir">
+                                          {Array.from({ length: NOTA_MAXIMA_ITEM + 1 }, (_, n) => n).map((n) => (
+                                            <button
+                                              key={n}
+                                              type="button"
+                                              onClick={() => setNotaItem(estacion, item.codigo, n)}
+                                              className={`flex-1 rounded-md py-1.5 text-[11px] font-bold border transition-colors ${
+                                                nota === n
+                                                  ? 'bg-blue-600 border-blue-600 text-white'
+                                                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
+                                              }`}
+                                            >
+                                              {n}
+                                            </button>
+                                          ))}
+                                        </div>
+                                        <div className="hidden modo-impresion text-[11px] font-bold text-slate-700">
+                                          Calificación otorgada: {nota} / {NOTA_MAXIMA_ITEM}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+ 
+                          <div>
+                            <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Observaciones de la estación</label>
+                            <textarea
+                              rows={3}
+                              placeholder="Comentarios del docente sobre el desempeño en esta estación..."
+                              value={detalle.observaciones}
+                              onChange={(e) => setObservacionEstacion(estacion, e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none no-imprimir"
+                            />
+                            <div className="hidden modo-impresion text-xs text-slate-700 bg-slate-50 p-2 rounded border border-slate-200">
+                              {detalle.observaciones || 'Sin observaciones registradas.'}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+ 
+            <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+              <button
+                onClick={descargarPDFEstacionActual}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs transition-colors flex items-center gap-1.5 no-imprimir shadow-sm"
+              >
+                📄 Descargar PDF Estación
+              </button>
+ 
+              <div className="flex gap-3 no-imprimir">
+                <button
+                  onClick={() => setEstudianteSeleccionado(null)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-4 py-2.5 rounded-xl text-xs transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={guardarFichaEstudiante}
+                  disabled={guardando}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-colors shadow-sm"
+                >
+                  {guardando ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

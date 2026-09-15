@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import ECOE from './ECOE';
 
 // Corregir icono por defecto de Leaflet en React
 delete L.Icon.Default.prototype._getIconUrl;
@@ -353,6 +354,7 @@ export default function App() {
   const [filtroCohorte, setFiltroCohorte] = useState('todas');
   const [filtroLocalidad, setFiltroLocalidad] = useState('todas');
 
+  
   useEffect(() => {
     fetch(`${API_URL}?vista=estudiantes`)
       .then((res) => res.json())
@@ -385,7 +387,7 @@ export default function App() {
   const hoy = new Date();
   const msPorSemana = 1000 * 60 * 60 * 24 * 7;
 
-const estudiantesAgrupados = useMemo(() => {
+  const estudiantesAgrupados = useMemo(() => {
     return Object.values(
       rotaciones.reduce((acc, item) => {
         const dni = item.DNI;
@@ -416,7 +418,6 @@ const estudiantesAgrupados = useMemo(() => {
         const institucionLimpia = institucionItem.toString().trim();
         const moduloNombre = item.Modulo_Rotacion || item.Modulo || 'Módulo';
 
-        // Si la institución está vacía, mostramos el nombre del módulo o un indicador claro
         const institucionFinal = (!institucionLimpia || institucionLimpia === '-' || institucionLimpia === '') 
           ? `Sin institución asignada (${moduloNombre})` 
           : institucionLimpia;
@@ -669,7 +670,7 @@ const estudiantesAgrupados = useMemo(() => {
     return acc;
   }, {});
 
-  // Geocoding seguro y optimizado para evitar pantallas en blanco
+  // Geocoding seguro y optimizado
   useEffect(() => {
     if (seccionPrincipal === 'estudiantes' && vista !== 'mapa') return;
     if (seccionPrincipal === 'convenios' && vistaConvenios !== 'mapa') return;
@@ -684,7 +685,6 @@ const estudiantesAgrupados = useMemo(() => {
         if (!isMounted) break;
         if (currentCoords[inst]) continue;
         
-        // Si está en el catálogo, lo resolvemos inmediatamente sin llamadas externas
         const catalogoMatch = buscarEnCatalogoInstituciones(inst);
         if (catalogoMatch) {
           setCoordsState(prev => ({ ...prev, [inst]: catalogoMatch }));
@@ -774,6 +774,14 @@ const estudiantesAgrupados = useMemo(() => {
               }`}
             >
               📄 Convenios
+            </button>
+            <button
+              onClick={() => setSeccionPrincipal('ecoe')}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+                seccionPrincipal === 'ecoe' ? 'bg-blue-900 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              🩺 ECOE
             </button>
           </div>
         </div>
@@ -1231,114 +1239,114 @@ const estudiantesAgrupados = useMemo(() => {
                 </div>
               )
             ) : (
-<div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4 items-start">
-  
-  {/* MAPA */}
-  <div className="relative h-[500px] w-full rounded-xl overflow-hidden border border-slate-200 z-0">
-    <MapContainer 
-      center={[-32.1, -63.5]} 
-      zoom={8} 
-      scrollWheelZoom={true} 
-      className="h-full w-full"
-    >
-      <MapResizeHelper />
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4 items-start">
+                <div className="relative h-[500px] w-full rounded-xl overflow-hidden border border-slate-200 z-0">
+                  <MapContainer 
+                    center={[-32.1, -63.5]} 
+                    zoom={8} 
+                    scrollWheelZoom={true} 
+                    className="h-full w-full"
+                  >
+                    <MapResizeHelper />
 
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
 
-      {Object.entries(conteoConveniosInst).map(([inst, datos]) => {
-        const coords = resolverCoordenadasInstitucion(
-          inst,
-          datos.localidad,
-          coordenadasConveniosInst
-        );
+                    {Object.entries(conteoConveniosInst).map(([inst, datos]) => {
+                      const coords = resolverCoordenadasInstitucion(
+                        inst,
+                        datos.localidad,
+                        coordenadasConveniosInst
+                      );
 
-        const estadoPrincipal =
-          datos.conveniosAsociados?.[0]?.Estado ||
-          datos.conveniosAsociados?.[0]?.ESTADO ||
-          '';
+                      const estadoPrincipal =
+                        datos.conveniosAsociados?.[0]?.Estado ||
+                        datos.conveniosAsociados?.[0]?.ESTADO ||
+                        '';
 
-        const iconoPersonalizado =
-          crearIconoPersonalizadoConvenio(estadoPrincipal);
+                      const iconoPersonalizado =
+                        crearIconoPersonalizadoConvenio(estadoPrincipal);
 
-        return (
-          <Marker
-            key={inst}
-            position={coords}
-            icon={iconoPersonalizado}
-          >
-            <Popup>
-              <div className="p-1 text-center font-sans max-w-[240px]">
-                
-                <h4 className="font-bold text-blue-950 text-xs leading-tight">
-                  {inst}
-                </h4>
-
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  {datos.localidad}
-                </p>
-
-                <p className="text-xs text-slate-600 mt-1">
-                  <span className="font-bold text-blue-900">
-                    {datos.cantidadConvenios}
-                  </span>{" "}
-                  convenio(s) asociado(s)
-                </p>
-
-                {/* LISTADO INTERACTIVO DE DOCUMENTOS / CONVENIOS */}
-                <div className="mt-2 text-left max-h-36 overflow-y-auto space-y-1.5 border-t border-slate-100 pt-1.5">
-                  {datos.conveniosAsociados.map((c, i) => (
-                    <div
-                      key={i}
-                      className="text-[10px] bg-slate-50 p-1.5 rounded border border-slate-200 flex flex-col gap-1"
-                    >
-                      <div className="flex justify-between items-start gap-1">
-                        <span className="font-bold text-blue-900 leading-tight">
-                          {c['TIPO DE DOCUMENTO'] || c.Tipo_Documento || 'Convenio'}
-                        </span>
-                        <span className="text-[9px] px-1 rounded bg-slate-200 text-slate-700 font-semibold">
-                          {c.Estado || c.ESTADO || 'Sin estado'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
-                        <button
-                          onClick={() => setConvenioSeleccionado(c)}
-                          className="text-[10px] text-blue-800 hover:underline font-semibold"
+                      return (
+                        <Marker
+                          key={inst}
+                          position={coords}
+                          icon={iconoPersonalizado}
                         >
-                          Ver detalle 📄
-                        </button>
+                          <Popup>
+                            <div className="p-1 text-center font-sans max-w-[240px]">
+                              
+                              <h4 className="font-bold text-blue-950 text-xs leading-tight">
+                                {inst}
+                              </h4>
 
-                        {(c.LINK || c.Link || c.url) && (
-                          <a 
-                            href={c.LINK || c.Link || c.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="bg-blue-900 hover:bg-blue-950 text-white px-2 py-0.5 rounded font-bold text-[9px] shadow-sm"
-                          >
-                            Ver 🔍
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                {datos.localidad}
+                              </p>
+
+                              <p className="text-xs text-slate-600 mt-1">
+                                <span className="font-bold text-blue-900">
+                                  {datos.cantidadConvenios}
+                                </span>{" "}
+                                convenio(s) asociado(s)
+                              </p>
+
+                              <div className="mt-2 text-left max-h-36 overflow-y-auto space-y-1.5 border-t border-slate-100 pt-1.5">
+                                {datos.conveniosAsociados.map((c, i) => (
+                                  <div
+                                    key={i}
+                                    className="text-[10px] bg-slate-50 p-1.5 rounded border border-slate-200 flex flex-col gap-1"
+                                  >
+                                    <div className="flex justify-between items-start gap-1">
+                                      <span className="font-bold text-blue-900 leading-tight">
+                                        {c['TIPO DE DOCUMENTO'] || c.Tipo_Documento || 'Convenio'}
+                                      </span>
+                                      <span className="text-[9px] px-1 rounded bg-slate-200 text-slate-700 font-semibold">
+                                        {c.Estado || c.ESTADO || 'Sin estado'}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center justify-between gap-1 pt-1 border-t border-slate-100">
+                                      <button
+                                        onClick={() => setConvenioSeleccionado(c)}
+                                        className="text-[10px] text-blue-800 hover:underline font-semibold"
+                                      >
+                                        Ver detalle 📄
+                                      </button>
+
+                                      {(c.LINK || c.Link || c.url) && (
+                                        <a 
+                                          href={c.LINK || c.Link || c.url} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className="bg-blue-900 hover:bg-blue-950 text-white px-2 py-0.5 rounded font-bold text-[9px] shadow-sm"
+                                        >
+                                          Ver 🔍
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+
+                            </div>
+                          </Popup>
+                        </Marker>
+                      );
+                    })}
+                  </MapContainer>
                 </div>
-
+                <LeyendaEstadosConvenios />
               </div>
-            </Popup>
-          </Marker>
-        );
-      })}
-    </MapContainer>
-  </div>
-
-  {/* LEYENDA */}
-  <LeyendaEstadosConvenios />
-
-</div>
             )}
+          </div>
+        )}
+
+        {seccionPrincipal === 'ecoe' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <ECOE />
           </div>
         )}
 
