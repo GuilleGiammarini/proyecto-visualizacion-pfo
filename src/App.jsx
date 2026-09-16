@@ -1344,11 +1344,13 @@ export default function App() {
           </div>
         )}
 
-        {seccionPrincipal === 'ecoe' && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-            <ECOE />
-          </div>
-        )}
+        {seccionPrincipal === 'ecoe' ? (
+  <ECOE />
+) : (
+  <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+    {/* Aquí va el contenido de tus otras secciones si las tienes (como estudiantes, convenios, etc.) */}
+  </div>
+)}
 
       </div>
 

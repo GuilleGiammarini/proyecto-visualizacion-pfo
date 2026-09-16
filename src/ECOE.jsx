@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import './ECOE.css'; // Todos los estilos, colores e impresión viven acá
 import {
   ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -8,17 +9,14 @@ import {
  
 const API_URL = "https://script.google.com/macros/s/AKfycby-qfURF_V4SjrHJIbr7_O-FVIm-QxUJf5nSwg3s5Lyx5as0o2jsEVQVfCSU751OprO-A/exec";
  
-const UMBRAL_APROBACION_ESTACION = 60; 
-const PORCENTAJE_MIN_ESTACIONES_APROBADAS = 0.70; 
-const PROMEDIO_MIN_EXAMEN = 60; 
-const NOTA_MAXIMA_ITEM = 5; 
+const UMBRAL_APROBACION_ESTACION = 60;
+const PORCENTAJE_MIN_ESTACIONES_APROBADAS = 0.70;
+const PROMEDIO_MIN_EXAMEN = 60;
+const NOTA_MAXIMA_ITEM = 5;
  
 const MARCA = {
-  navyOscuro: '#12243d',   
-  navy: '#1c3f66',         
-  navyClaro: '#2f5a86',    
-  teal: '#5fa8ac',         
-  fondo: '#f4f7fb'         
+  navy: '#1c3f66',
+  teal: '#5fa8ac'
 };
  
 const BANDAS = [
@@ -68,286 +66,13 @@ const formatearFecha = (iso) => {
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
 };
  
-const EstilosImpresion = () => (
-  <style>{`
-    @page {
-      size: A4 portrait;
-      margin: 10mm 11mm 12mm 11mm;
-    }
-
-    @media print {
-      html, body {
-        width: 100% !important;
-        min-width: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-      }
-
-      body {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-
-      body * {
-        visibility: hidden;
-      }
-
-      /* ==========================================================
-         1. ESTILOS DE IMPRESIÓN PARA EL MODAL DE ESTACIONES
-         ========================================================== */
-      .contenedor-modal-ecoe {
-        visibility: visible !important;
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        display: block !important;
-        width: 100% !important;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        background: white !important;
-        overflow: visible !important;
-        box-shadow: none !important;
-        border: none !important;
-        backdrop-filter: none !important;
-      }
-
-      #modal-evaluacion-contenido {
-        visibility: visible !important;
-        position: static !important;
-        display: block !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        overflow: visible !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: white !important;
-        box-shadow: none !important;
-        border: none !important;
-        border-radius: 0 !important;
-      }
-
-      #modal-evaluacion-contenido * {
-        visibility: visible !important;
-      }
-
-      /* ==========================================================
-         2. ESTILOS DE IMPRESIÓN PARA EL PORTAFOLIO COMPLETO
-         ========================================================== */
-      #contenedor-portafolio-impresion.modo-impresion {
-        visibility: visible !important;
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        display: block !important;
-        width: 100% !important;
-        height: auto !important;
-        min-height: 0 !important;
-        max-height: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        background: white !important;
-        overflow: visible !important;
-      }
-
-      #contenedor-portafolio-impresion.modo-impresion * {
-        visibility: visible !important;
-      }
-
-      /* Ocultar elementos generales con la clase no-imprimir */
-      .no-imprimir {
-        display: none !important;
-        visibility: hidden !important;
-      }
-
-      .membrete-impresion {
-        display: flex !important;
-        visibility: visible !important;
-        align-items: center;
-        justify-content: space-between;
-        width: 100% !important;
-        min-height: 44px !important;
-        padding: 0 0 7px 0 !important;
-        margin: 0 0 10px 0 !important;
-        border-bottom: 2px solid #1c3f66 !important;
-      }
-
-      .membrete-impresion img {
-        height: 43px !important;
-        width: auto !important;
-      }
-
-      /* Encabezado de la evaluación */
-      #modal-evaluacion-contenido > div.flex.justify-between.items-start {
-        padding-bottom: 8px !important;
-        margin-bottom: 10px !important;
-      }
-
-      #modal-evaluacion-contenido h3 {
-        font-size: 18px !important;
-        line-height: 1.15 !important;
-        margin: 0 !important;
-      }
-
-      #modal-evaluacion-contenido h4 {
-        font-size: 11px !important;
-      }
-
-      /* Resumen superior: más compacto y legible */
-      #modal-evaluacion-contenido .grid.grid-cols-2.sm\\:grid-cols-4,
-      #contenedor-portafolio-impresion .grid.grid-cols-2.sm\\:grid-cols-4 {
-        display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important;
-        gap: 7px !important;
-        margin-bottom: 10px !important;
-      }
-
-      #modal-evaluacion-contenido .grid.grid-cols-2.sm\\:grid-cols-4 > div,
-      #contenedor-portafolio-impresion .grid.grid-cols-2.sm\\:grid-cols-4 > div {
-        padding: 7px 9px !important;
-        border-radius: 7px !important;
-        min-height: 51px !important;
-      }
-
-      #modal-evaluacion-contenido .grid.grid-cols-2.sm\\:grid-cols-4 p.text-lg,
-      #contenedor-portafolio-impresion .grid.grid-cols-2.sm\\:grid-cols-4 p.text-2xl {
-        font-size: 17px !important;
-        line-height: 1.1 !important;
-        margin-top: 2px !important;
-      }
-
-      /* Evaluador */
-      #modal-evaluacion-contenido input {
-        font-size: 10px !important;
-        padding: 5px 7px !important;
-      }
-
-      /* Contenedor principal de la estación */
-      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden {
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 8px !important;
-        overflow: visible !important;
-        margin-top: 5px !important;
-      }
-
-      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child {
-        padding: 8px 10px !important;
-        background: #f1f5f9 !important;
-        border-bottom: 1px solid #cbd5e1 !important;
-      }
-
-      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child span:first-child {
-        font-size: 13px !important;
-        font-weight: 800 !important;
-        text-transform: uppercase !important;
-      }
-
-      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child span:last-child {
-        font-size: 10px !important;
-        padding: 4px 7px !important;
-      }
-
-      #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > .p-4 {
-        padding: 9px 10px !important;
-      }
-
-      /* Categorías */
-      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 {
-        margin-bottom: 9px !important;
-        break-inside: auto !important;
-        page-break-inside: auto !important;
-      }
-
-      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 > div:first-child {
-        padding: 5px 7px !important;
-        margin-bottom: 4px !important;
-        background: #eaf0f6 !important;
-        border-left: 3px solid #1c3f66 !important;
-        border-radius: 4px !important;
-      }
-
-      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 > div:first-child span:first-child {
-        font-size: 10px !important;
-        color: #1c3f66 !important;
-        font-weight: 800 !important;
-      }
-
-      #modal-evaluacion-contenido .space-y-4 > div.space-y-1\\.5 > div:first-child span:last-child {
-        font-size: 9px !important;
-      }
-
-      /* Cada ítem: compacto pero legible */
-      #modal-evaluacion-contenido .space-y-2 > div.bg-slate-50 {
-        padding: 5px 7px !important;
-        margin-bottom: 3px !important;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 5px !important;
-        background: #f8fafc !important;
-        break-inside: avoid !important;
-        page-break-inside: avoid !important;
-      }
-
-      #modal-evaluacion-contenido .space-y-2 > div.bg-slate-50 .text-xs {
-        font-size: 10.5px !important;
-        line-height: 1.25 !important;
-      }
-
-      /* Ocultar botones de puntuación y mostrar la calificación */
-      #modal-evaluacion-contenido .hidden.modo-impresion {
-        display: block !important;
-        visibility: visible !important;
-        margin-top: 2px !important;
-        font-size: 9px !important;
-      }
-
-      /* Observaciones */
-      #modal-evaluacion-contenido textarea {
-        display: none !important;
-      }
-
-      #modal-evaluacion-contenido .hidden.modo-impresion.text-xs {
-        display: block !important;
-        padding: 7px !important;
-        min-height: 24px !important;
-        font-size: 10px !important;
-        line-height: 1.35 !important;
-        margin-top: 3px !important;
-      }
-
-      /* Evitar que títulos y bloques importantes queden solos al pie */
-      #modal-evaluacion-contenido h3,
-      #modal-evaluacion-contenido h4,
-      #modal-evaluacion-contenido .border-b,
-      #contenedor-portafolio-impresion h3 {
-        break-after: avoid !important;
-        page-break-after: avoid !important;
-      }
-
-      /* El bloque final del modal no agrega espacio innecesario */
-      #modal-evaluacion-contenido > .flex.justify-between.items-center.pt-4 {
-        display: none !important;
-      }
-    }
-
-    .membrete-impresion {
-      display: none;
-    }
-  `}</style>
-);
- 
 const MembretePDF = () => (
   <div className="membrete-impresion">
     <div className="flex items-center gap-4">
-      <img 
-        src="/Membrete-UNVMHumanas.png" 
-        alt="Membrete UNVM Humanas" 
-        style={{ height: '50px', objectFit: 'contain' }} 
+      <img
+        src="/Membrete-UNVMHumanas.png"
+        alt="Membrete UNVM Humanas"
+        className="ecoe-membrete-logo"
       />
     </div>
     <div className="text-right">
@@ -369,10 +94,7 @@ function EncabezadoECOE({ vista, setVista, totalEstudiantes, totalEstaciones }) 
   ];
  
   return (
-    <div
-      className="rounded-2xl overflow-hidden shadow-sm border border-slate-200 no-imprimir"
-      style={{ background: `linear-gradient(135deg, ${MARCA.navy} 0%, ${MARCA.navyOscuro} 100%)` }}
-    >
+    <div className="ecoe-header-gradient rounded-2xl overflow-hidden shadow-sm border border-slate-200 no-imprimir">
       <div className="px-6 pt-6 pb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <div className="flex items-baseline gap-2">
@@ -588,7 +310,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
     }
     const el = document.getElementById('contenedor-portafolio-impresion');
     if (el) el.classList.add('modo-impresion');
-    
+ 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.print();
@@ -638,7 +360,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
       ) : (
         <div id="contenedor-portafolio-impresion" className="space-y-6 p-1">
           <MembretePDF />
-
+ 
           <div className="hidden modo-impresion mb-4 pb-3 border-b border-slate-300">
             <h2 className="text-xl font-bold text-slate-900">Portafolio ECOE - {estudiante.alumno}</h2>
             <p className="text-xs text-slate-600">DNI: {estudiante.dni} · Día: {estudiante.dia || 'S/D'}</p>
@@ -715,11 +437,11 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
 }
  
 export default function ECOE() {
-  const [vista, setVista] = useState('mapa'); 
+  const [vista, setVista] = useState('mapa');
  
-  const [ecoeDatos, setEcoeDatos] = useState([]);           
-  const [estacionesConfigRaw, setEstacionesConfigRaw] = useState([]); 
-  const [asignacionesRaw, setAsignacionesRaw] = useState([]);         
+  const [ecoeDatos, setEcoeDatos] = useState([]);
+  const [estacionesConfigRaw, setEstacionesConfigRaw] = useState([]);
+  const [asignacionesRaw, setAsignacionesRaw] = useState([]);
   const [loadingEcoe, setLoadingEcoe] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
  
@@ -728,11 +450,14 @@ export default function ECOE() {
   const [filtroDiaEcoe, setFiltroDiaEcoe] = useState('todos');
  
   const [estudianteSeleccionado, setEstudianteSeleccionado] = useState(null);
-  const [estacionSeleccionada, setEstacionSeleccionada] = useState(null); 
+  const [estacionSeleccionada, setEstacionSeleccionada] = useState(null);
   const [evaluadorActual, setEvaluadorActual] = useState('');
   const [guardando, setGuardando] = useState(false);
  
   const [dniPortafolio, setDniPortafolio] = useState('');
+  
+  // <-- AQUÍ SE MOVIÓ CORRECTAMENTE EL HOOK DENTRO DEL COMPONENTE -->
+  const [dniFiltroAnalisis, setDniFiltroAnalisis] = useState('');
  
   const [colaPendientes, setColaPendientes] = useState(() => {
     try {
@@ -1008,8 +733,11 @@ export default function ECOE() {
       };
     });
  
-    setEvaluadorActual('');
-    setEstacionSeleccionada(estacionInicial || est.estaciones[0] || null);
+    const estacionMeta = estacionInicial || est.estaciones[0] || null;
+    const resultadoExistente = resultadosMap[`${est.dni}__${estacionMeta}`];
+ 
+    setEvaluadorActual(resultadoExistente?.evaluador || '');
+    setEstacionSeleccionada(estacionMeta);
     setEstudianteSeleccionado({ ...est, estacionesDetalle });
   };
  
@@ -1067,7 +795,8 @@ export default function ECOE() {
   };
  
   const guardarFichaEstudiante = async () => {
-    if (!estudianteSeleccionado) return;
+    if (!estudianteSeleccionado || !estacionSeleccionada) return;
+ 
     if (!evaluadorActual.trim()) {
       alert('Ingresá el nombre del evaluador/a antes de guardar.');
       return;
@@ -1075,72 +804,83 @@ export default function ECOE() {
  
     setGuardando(true);
     const { dni, alumno, dia, estacionesDetalle } = estudianteSeleccionado;
+    const estacion = estacionSeleccionada;
+    const detalle = estacionesDetalle[estacion];
  
-    for (const estacion of Object.keys(estacionesDetalle)) {
-      const detalle = estacionesDetalle[estacion];
-      const { puntaje, puntajeMax, porcentaje } = puntajeEstacion(estacion, detalle.itemsPuntaje);
-      const estado = porcentaje >= UMBRAL_APROBACION_ESTACION ? 'Aprobado' : 'Desaprobado';
+    if (!detalle) {
+      alert('No se encontró el detalle para esta estación.');
+      setGuardando(false);
+      return;
+    }
  
-      const nuevoRegistro = {
-        accion: 'guardar_ecoe',
-        idEvaluacion: `${dni}_${estacion}`,
-        dni,
-        nombre: alumno,
-        estacion,
-        dia,
-        puntajeTotal: puntaje,
-        puntajeMaxEstacion: puntajeMax,
-        porcentajeLogro: porcentaje,
-        estado,
-        evaluador: evaluadorActual.trim(),
-        detalleItems: JSON.stringify(detalle.itemsPuntaje),
-        observaciones: detalle.observaciones || '',
-        timestamp: new Date().toISOString()
+    const { puntaje, puntajeMax, porcentaje } = puntajeEstacion(estacion, detalle.itemsPuntaje);
+    const estado = porcentaje >= UMBRAL_APROBACION_ESTACION ? 'Aprobado' : 'Desaprobado';
+ 
+    const idEvaluacion = `${dni}_${estacion}`;
+ 
+    const nuevoRegistro = {
+      accion: 'guardar_ecoe',
+      idEvaluacion: idEvaluacion,
+      dni,
+      nombre: alumno,
+      estacion,
+      dia,
+      puntajeTotal: puntaje,
+      puntajeMaxEstacion: puntajeMax,
+      porcentajeLogro: porcentaje,
+      estado,
+      evaluador: evaluadorActual.trim(),
+      detalleItems: JSON.stringify(detalle.itemsPuntaje),
+      observaciones: detalle.observaciones || '',
+      timestamp: new Date().toISOString()
+    };
+ 
+    setEcoeDatos((prev) => {
+      const index = prev.findIndex(
+        (p) => String(p.ID_Evaluacion || p.idEvaluacion) === String(idEvaluacion) ||
+               (String(p.DNI_Estudiante || p.dni) === String(dni) && String(p.Estacion || p.estacion) === String(estacion))
+      );
+ 
+      const filaActualizada = {
+        ID_Evaluacion: idEvaluacion,
+        DNI_Estudiante: dni,
+        Nombre_Estudiante: alumno,
+        Estacion: estacion,
+        Evaluador: evaluadorActual.trim(),
+        Puntaje_Total: puntaje,
+        Puntaje_Max_Estacion: puntajeMax,
+        Porcentaje_Logro: porcentaje,
+        Estado: estado,
+        Detalle_Items: JSON.stringify(detalle.itemsPuntaje),
+        Observaciones: detalle.observaciones || '',
+        Timestamp: nuevoRegistro.timestamp
       };
  
-      setEcoeDatos((prev) => {
-        const index = prev.findIndex(
-          (p) => String(p.DNI_Estudiante || p.dni) === String(dni) && (p.Estacion || p.estacion) === estacion
-        );
-        const filaActualizada = {
-          DNI_Estudiante: dni,
-          Nombre_Estudiante: alumno,
-          Estacion: estacion,
-          Evaluador: evaluadorActual.trim(),
-          Puntaje_Total: puntaje,
-          Puntaje_Max_Estacion: puntajeMax,
-          Porcentaje_Logro: porcentaje,
-          Estado: estado,
-          Detalle_Items: JSON.stringify(detalle.itemsPuntaje),
-          Observaciones: detalle.observaciones || '',
-          Timestamp: nuevoRegistro.timestamp
-        };
-        if (index >= 0) {
-          const copia = [...prev];
-          copia[index] = { ...copia[index], ...filaActualizada };
-          return copia;
-        }
-        return [...prev, filaActualizada];
-      });
+      if (index >= 0) {
+        const copia = [...prev];
+        copia[index] = { ...copia[index], ...filaActualizada };
+        return copia;
+      }
+      return [...prev, filaActualizada];
+    });
  
-      setColaPendientes((prev) => [...prev, nuevoRegistro]);
+    setColaPendientes((prev) => [...prev, nuevoRegistro]);
  
-      if (navigator.onLine) {
-        try {
-          await fetch(API_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(nuevoRegistro)
-          });
-        } catch (err) {
-          console.log('Guardado localmente por fallo de red:', err);
-        }
+    if (navigator.onLine) {
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(nuevoRegistro)
+        });
+      } catch (err) {
+        console.log('Guardado localmente por fallo de red:', err);
       }
     }
  
     setGuardando(false);
-    alert('¡Evaluación guardada con éxito!');
+    alert('¡Estación guardada con éxito!');
     setEstudianteSeleccionado(null);
   };
  
@@ -1149,17 +889,17 @@ export default function ECOE() {
       alert('Seleccioná una estación antes de descargar el PDF.');
       return;
     }
-
+ 
     const tituloOriginal = document.title;
     const nombreArchivo = `Estacion_${estacionSeleccionada.replace(/\s+/g, '_')}_${estudianteSeleccionado.alumno.replace(/\s+/g, '_')}`;
     const modalContent = document.getElementById('modal-evaluacion-contenido');
-
+ 
     document.title = nombreArchivo;
-
+ 
     if (modalContent) {
       modalContent.classList.add('modo-impresion');
     }
-
+ 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.print();
@@ -1172,8 +912,7 @@ export default function ECOE() {
   };
  
   return (
-    <div className="space-y-6 p-4 sm:p-6 rounded-2xl" style={{ background: MARCA.fondo }}>
-      <EstilosImpresion />
+    <div className="ecoe-root ecoe-container-full space-y-6 py-6">
       <EncabezadoECOE
         vista={vista}
         setVista={setVista}
@@ -1213,7 +952,48 @@ export default function ECOE() {
           <p className="text-xs font-semibold text-slate-500">Cargando datos de ECOE...</p>
         </div>
       ) : vista === 'analisis' ? (
-        <VistaAnalisisResultados datosPorEstacion={datosPorEstacion} />
+        <div className="space-y-6">
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 no-imprimir">
+            <div>
+              <h3 className="text-sm font-bold text-slate-800">Panel de Análisis y Estadísticas ECOE</h3>
+              <p className="text-xs text-slate-500">Métricas de rendimiento global o filtradas por estudiante.</p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <select
+                value={dniFiltroAnalisis || ''}
+                onChange={(e) => setDniFiltroAnalisis(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">-- Todos los alumnos (Global) --</option>
+                {listaEstudiantes && listaEstudiantes.map((est) => (
+                  <option key={est.dni} value={est.dni}>
+                    {est.alumno} (DNI: {est.dni})
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => {
+                  const contenedor = document.getElementById('contenedor-analisis-impresion');
+                  contenedor.classList.add('modo-impresion');
+                  window.print();
+                  setTimeout(() => contenedor.classList.remove('modo-impresion'), 500);
+                }}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                <span>📄 Descargar Análisis en PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <div id="contenedor-analisis-impresion">
+            <VistaAnalisisResultados 
+              datosPorEstacion={datosPorEstacion} 
+              dniFiltro={dniFiltroAnalisis} 
+            />
+          </div>
+        </div>
       ) : vista === 'portafolio' ? (
         <VistaPortafolio
           listaEstudiantes={listaEstudiantes}
@@ -1286,10 +1066,10 @@ export default function ECOE() {
           ) : (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden no-imprimir">
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full text-left border-collapse ecoe-table-fixed">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      <th className="p-3 sticky left-0 bg-slate-50 z-10 min-w-[200px]">Estudiante / Día</th>
+                      <th className="p-3 sticky left-0 bg-slate-50 z-10 ecoe-col-estudiante">Estudiante / Día</th>
                       {columnasEstaciones.map((est, i) => (
                         <th key={i} className="p-3 text-center min-w-[120px] truncate max-w-[140px]" title={est}>
                           {est}
@@ -1304,7 +1084,7 @@ export default function ECOE() {
                       const resumen = calcularResumenEstudiante(est);
                       return (
                         <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="p-3 sticky left-0 bg-white font-bold text-slate-800 z-10 shadow-sm">
+                          <td className="p-3 sticky left-0 bg-white font-bold text-slate-800 z-10 shadow-sm ecoe-col-estudiante">
                             {est.alumno}
                             <div className="flex items-center gap-2 mt-0.5">
                               <span className="text-[10px] font-normal text-slate-400">DNI: {est.dni}</span>
@@ -1367,9 +1147,9 @@ export default function ECOE() {
       {estudianteSeleccionado && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 contenedor-modal-ecoe">
           <div id="modal-evaluacion-contenido" className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
-            
+ 
             <MembretePDF />
-
+ 
             <div className="flex justify-between items-start border-b border-slate-100 pb-4">
               <div>
                 <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Evaluación Clínica Individual - ECOE</span>

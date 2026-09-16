@@ -1,0 +1,345 @@
+/* ============================================================
+   ECOE.css
+   Estilos de la vista ECOE: paleta de marca, layout de mapa de
+   calor a pantalla completa y reglas de impresión (fichas de
+   estación, portafolio de estudiante y análisis de resultados).
+   ============================================================ */
+ 
+/* ------------------------------------------------------------
+   1. Paleta de marca (variables CSS)
+   ------------------------------------------------------------ */
+:root {
+  --ecoe-navy-oscuro: #12243d;
+  --ecoe-navy: #1c3f66;
+  --ecoe-navy-claro: #2f5a86;
+  --ecoe-teal: #5fa8ac;
+  --ecoe-fondo: #f4f7fb;
+}
+ 
+/* Fondo general del panel ECOE */
+.ecoe-root {
+  background: var(--ecoe-fondo);
+}
+ 
+/* Degradado del encabezado */
+.ecoe-header-gradient {
+  background: linear-gradient(135deg, var(--ecoe-navy) 0%, var(--ecoe-navy-oscuro) 100%);
+}
+ 
+/* ------------------------------------------------------------
+   2. Vista de Mapa de calor a pantalla completa
+   ------------------------------------------------------------ */
+.ecoe-container-full {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-sizing: border-box;
+}
+
+/* ------------------------------------------------------------
+   3. Membrete institucional (usado en PDFs de estación y portafolio)
+   ------------------------------------------------------------ */
+.membrete-impresion {
+  display: none;
+}
+ 
+.ecoe-membrete-logo {
+  height: 50px;
+  object-fit: contain;
+}
+ 
+/* ------------------------------------------------------------
+   4. Reglas de impresión (ficha de estación, portafolio y análisis)
+   ------------------------------------------------------------ */
+@page {
+  size: A4 portrait;
+  margin: 10mm 11mm 12mm 11mm;
+}
+ 
+@media print {
+  html, body {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+ 
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+ 
+  body * {
+    visibility: hidden;
+  }
+ 
+  /* ==========================================================
+     4.1 Impresión del modal de evaluación por estación
+     ========================================================== */
+  .contenedor-modal-ecoe {
+    visibility: visible !important;
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    backdrop-filter: none !important;
+  }
+ 
+  #modal-evaluacion-contenido {
+    visibility: visible !important;
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+ 
+  #modal-evaluacion-contenido * {
+    visibility: visible !important;
+  }
+ 
+  /* ==========================================================
+     4.2 Impresión del portafolio completo
+     ========================================================== */
+  #contenedor-portafolio-impresion.modo-impresion {
+    visibility: visible !important;
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+ 
+  #contenedor-portafolio-impresion.modo-impresion * {
+    visibility: visible !important;
+  }
+
+  /* ==========================================================
+     4.3 Impresión de la vista de Análisis de Resultados
+     ========================================================== */
+  #contenedor-analisis-impresion.modo-impresion {
+    visibility: visible !important;
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  #contenedor-analisis-impresion.modo-impresion * {
+    visibility: visible !important;
+  }
+ 
+  /* Ocultar elementos generales con la clase no-imprimir */
+  .no-imprimir {
+    display: none !important;
+    visibility: hidden !important;
+  }
+ 
+  .membrete-impresion {
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center;
+    justify-content: space-between;
+    width: 100% !important;
+    min-height: 44px !important;
+    padding: 0 0 7px 0 !important;
+    margin: 0 0 10px 0 !important;
+    border-bottom: 2px solid #1c3f66 !important;
+  }
+ 
+  .membrete-impresion img {
+    height: 43px !important;
+    width: auto !important;
+  }
+ 
+  /* Encabezado de la evaluación: sin espacios superiores */
+  #modal-evaluacion-contenido > div.flex.justify-between.items-start {
+    padding-top: 0 !important;
+    padding-bottom: 8px !important;
+    margin-top: 0 !important;
+    margin-bottom: 10px !important;
+  }
+ 
+  #modal-evaluacion-contenido h3 {
+    font-size: 18px !important;
+    line-height: 1.15 !important;
+    margin: 0 !important;
+  }
+ 
+  #modal-evaluacion-contenido h4 {
+    font-size: 11px !important;
+  }
+ 
+  /* Resumen superior: más compacto y legible */
+  #modal-evaluacion-contenido .grid.grid-cols-2.sm\:grid-cols-4,
+  #contenedor-portafolio-impresion .grid.grid-cols-2.sm\:grid-cols-4,
+  #contenedor-analisis-impresion .grid {
+    display: grid !important;
+    gap: 7px !important;
+    margin-bottom: 10px !important;
+  }
+ 
+  #modal-evaluacion-contenido .grid.grid-cols-2.sm\:grid-cols-4 > div,
+  #contenedor-portafolio-impresion .grid.grid-cols-2.sm\:grid-cols-4 > div {
+    padding: 7px 9px !important;
+    border-radius: 7px !important;
+    min-height: 51px !important;
+  }
+ 
+  #modal-evaluacion-contenido .grid.grid-cols-2.sm\:grid-cols-4 p.text-lg,
+  #contenedor-portafolio-impresion .grid.grid-cols-2.sm\:grid-cols-4 p.text-2xl {
+    font-size: 17px !important;
+    line-height: 1.1 !important;
+    margin-top: 2px !important;
+  }
+ 
+  /* Evaluador */
+  #modal-evaluacion-contenido input {
+    font-size: 10px !important;
+    padding: 5px 7px !important;
+  }
+ 
+  /* Contenedor principal de la estación */
+  #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    overflow: visible !important;
+    margin-top: 5px !important;
+  }
+ 
+  #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child {
+    padding: 8px 10px !important;
+    background: #f1f5f9 !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+ 
+  #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child span:first-child {
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase !important;
+  }
+ 
+  #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > div:first-child span:last-child {
+    font-size: 10px !important;
+    padding: 4px 7px !important;
+  }
+ 
+  #modal-evaluacion-contenido .border.border-slate-200.rounded-xl.overflow-hidden > .p-4 {
+    padding: 9px 10px !important;
+  }
+ 
+  /* Categorías */
+  #modal-evaluacion-contenido .space-y-4 > div.space-y-1\.5 {
+    margin-bottom: 9px !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+ 
+  #modal-evaluacion-contenido .space-y-4 > div.space-y-1\.5 > div:first-child {
+    padding: 5px 7px !important;
+    margin-bottom: 4px !important;
+    background: #eaf0f6 !important;
+    border-left: 3px solid #1c3f66 !important;
+    border-radius: 4px !important;
+  }
+ 
+  #modal-evaluacion-contenido .space-y-4 > div.space-y-1\.5 > div:first-child span:first-child {
+    font-size: 10px !important;
+    color: #1c3f66 !important;
+    font-weight: 800 !important;
+  }
+ 
+  #modal-evaluacion-contenido .space-y-4 > div.space-y-1\.5 > div:first-child span:last-child {
+    font-size: 9px !important;
+  }
+ 
+  /* Cada ítem: compacto pero legible */
+  #modal-evaluacion-contenido .space-y-2 > div.bg-slate-50 {
+    padding: 5px 7px !important;
+    margin-bottom: 3px !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 5px !important;
+    background: #f8fafc !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+ 
+  #modal-evaluacion-contenido .space-y-2 > div.bg-slate-50 .text-xs {
+    font-size: 10.5px !important;
+    line-height: 1.25 !important;
+  }
+ 
+  /* Ocultar botones de puntuación y mostrar la calificación */
+  #modal-evaluacion-contenido .hidden.modo-impresion {
+    display: block !important;
+    visibility: visible !important;
+    margin-top: 2px !important;
+    font-size: 9px !important;
+  }
+ 
+  /* Observaciones */
+  #modal-evaluacion-contenido textarea {
+    display: none !important;
+  }
+ 
+  #modal-evaluacion-contenido .hidden.modo-impresion.text-xs {
+    display: block !important;
+    padding: 7px !important;
+    min-height: 24px !important;
+    font-size: 10.5px !important;
+    line-height: 1.35 !important;
+    margin-top: 3px !important;
+  }
+ 
+  /* Evitar que títulos y bloques importantes queden solos al pie */
+  #modal-evaluacion-contenido h3,
+  #modal-evaluacion-contenido h4,
+  #modal-evaluacion-contenido .border-b,
+  #contenedor-portafolio-impresion h3,
+  #contenedor-analisis-impresion h3 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+ 
+  /* El bloque final del modal no agrega espacio innecesario */
+  #modal-evaluacion-contenido > .flex.justify-between.items-center.pt-4 {
+    display: none !important;
+  }
+}
