@@ -142,39 +142,57 @@ function TarjetaMetrica({ etiqueta, valor, detalle, acento }) {
   );
 }
  
-function VistaAnalisisResultados({ datosPorEstacion }) {
-  const hayDatos = datosPorEstacion.some((d) => d.evaluados > 0);
+function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, listaEstudiantes }) {
+  // Si hay un DNI seleccionado, filtramos los resultados de ese estudiante
+  const datosCalculados = useMemo(() => {
+    if (!dniFiltro) return datosPorEstacion; // Modo global
+
+    const estudianteObj = listaEstudiantes.find(e => e.dni === dniFiltro);
+    if (!estudianteObj) return datosPorEstacion;
+
+    return datosPorEstacion.map((d) => {
+      const res = resultadosMap[`${dniFiltro}__${d.estacion}`];
+      return {
+        estacion: d.estacion,
+        promedio: res ? res.porcentaje : 0,
+        evaluados: res ? 1 : 0,
+        estado: res ? res.estado : 'Sin datos'
+      };
+    });
+  }, [datosPorEstacion, dniFiltro, resultadosMap, listaEstudiantes]);
+
+  const hayDatos = datosCalculados.some((d) => d.evaluados > 0);
  
   const promedioGeneral = useMemo(() => {
-    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return 0;
     return Math.round(conDatos.reduce((acc, d) => acc + d.promedio, 0) / conDatos.length);
-  }, [datosPorEstacion]);
+  }, [datosCalculados]);
  
   const estacionMasDificil = useMemo(() => {
-    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return null;
     return conDatos.reduce((min, d) => (d.promedio < min.promedio ? d : min), conDatos[0]);
-  }, [datosPorEstacion]);
+  }, [datosCalculados]);
  
   const estacionMasFacil = useMemo(() => {
-    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return null;
     return conDatos.reduce((max, d) => (d.promedio > max.promedio ? d : max), conDatos[0]);
-  }, [datosPorEstacion]);
+  }, [datosCalculados]);
  
   const tasaAprobacion = useMemo(() => {
-    const conDatos = datosPorEstacion.filter((d) => d.evaluados > 0);
+    const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return 0;
     const promedioAprobado = conDatos.filter((d) => d.promedio >= UMBRAL_APROBACION_ESTACION).length;
     return Math.round((promedioAprobado / conDatos.length) * 100);
-  }, [datosPorEstacion]);
+  }, [datosCalculados]);
  
   if (!hayDatos) {
     return (
       <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
         <p className="text-xs font-semibold text-slate-500">
-          Todavía no hay evaluaciones cargadas para generar el análisis de resultados.
+          Todavía no hay evaluaciones cargadas para este estudiante / filtro.
         </p>
       </div>
     );
@@ -209,7 +227,7 @@ function VistaAnalisisResultados({ datosPorEstacion }) {
             Rendimiento por estación (%)
           </h3>
           <ResponsiveContainer width="100%" height={300}>
-            <RadarChart data={datosPorEstacion} outerRadius="75%">
+            <RadarChart data={datosCalculados} outerRadius="75%">
               <PolarGrid stroke="#e2e8f0" />
               <PolarAngleAxis dataKey="estacion" tick={{ fontSize: 10, fill: '#475569' }} />
               <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9, fill: '#94a3b8' }} />
@@ -230,13 +248,13 @@ function VistaAnalisisResultados({ datosPorEstacion }) {
             Comparativa de puntuaciones por estación
           </h3>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={datosPorEstacion} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}>
+            <BarChart data={datosCalculados} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="estacion" tick={{ fontSize: 9, fill: '#475569' }} interval={0} angle={-20} textAnchor="end" height={60} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#94a3b8' }} />
               <Tooltip formatter={(v) => `${v}%`} />
               <Bar dataKey="promedio" radius={[6, 6, 0, 0]}>
-                {datosPorEstacion.map((d, i) => (
+                {datosCalculados.map((d, i) => (
                   <Cell key={i} fill={colorBarra(d.promedio)} />
                 ))}
               </Bar>
@@ -254,12 +272,12 @@ function VistaAnalisisResultados({ datosPorEstacion }) {
             <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               <th className="p-3">Estación</th>
               <th className="p-3 text-center">Evaluados</th>
-              <th className="p-3 text-center">Promedio</th>
+              <th className="p-3 text-center">Promedio / Calificación</th>
               <th className="p-3 text-center">Estado</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {datosPorEstacion.map((d, i) => {
+            {datosCalculados.map((d, i) => {
               const banda = obtenerBanda(d.promedio);
               return (
                 <tr key={i}>
@@ -885,31 +903,41 @@ export default function ECOE() {
   };
  
   const descargarPDFEstacionActual = () => {
-    if (!estudianteSeleccionado || !estacionSeleccionada) {
-      alert('Seleccioná una estación antes de descargar el PDF.');
-      return;
-    }
- 
-    const tituloOriginal = document.title;
-    const nombreArchivo = `Estacion_${estacionSeleccionada.replace(/\s+/g, '_')}_${estudianteSeleccionado.alumno.replace(/\s+/g, '_')}`;
-    const modalContent = document.getElementById('modal-evaluacion-contenido');
- 
-    document.title = nombreArchivo;
- 
-    if (modalContent) {
-      modalContent.classList.add('modo-impresion');
-    }
- 
+  if (!estudianteSeleccionado || !estacionSeleccionada) {
+    alert('Seleccioná una estación antes de descargar el PDF.');
+    return;
+  }
+
+  const tituloOriginal = document.title;
+
+  const nombreArchivo =
+    `ECOE_${estacionSeleccionada.replace(/\s+/g, '_')}_${estudianteSeleccionado.alumno.replace(/\s+/g, '_')}`;
+
+  const modalContenedor = document.querySelector('.contenedor-modal-ecoe');
+  const modalContent = document.getElementById('modal-evaluacion-contenido');
+
+  if (!modalContenedor || !modalContent) {
+    alert('No se encontró el contenido de la evaluación para generar el PDF.');
+    return;
+  }
+
+  document.title = nombreArchivo;
+
+  modalContenedor.classList.add('modo-impresion');
+  modalContent.classList.add('modo-impresion');
+
+  requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        window.print();
-        setTimeout(() => {
-          if (modalContent) modalContent.classList.remove('modo-impresion');
-          document.title = tituloOriginal;
-        }, 100);
-      });
+      window.print();
+
+      setTimeout(() => {
+        modalContenedor.classList.remove('modo-impresion');
+        modalContent.classList.remove('modo-impresion');
+        document.title = tituloOriginal;
+      }, 500);
     });
-  };
+  });
+};
  
   return (
     <div className="ecoe-root ecoe-container-full space-y-6 py-6">
@@ -975,10 +1003,20 @@ export default function ECOE() {
 
               <button
                 onClick={() => {
+                  const alumnoSeleccionado = listaEstudiantes?.find(e => e.dni === dniFiltroAnalisis);
+                  const nombreReporte = alumnoSeleccionado ? alumnoSeleccionado.alumno : 'Global';
+                  const tituloAnterior = document.title;
+                  document.title = `Análisis - ${nombreReporte}`;
+
                   const contenedor = document.getElementById('contenedor-analisis-impresion');
                   contenedor.classList.add('modo-impresion');
+                  
                   window.print();
-                  setTimeout(() => contenedor.classList.remove('modo-impresion'), 500);
+                  
+                  setTimeout(() => {
+                    contenedor.classList.remove('modo-impresion');
+                    document.title = tituloAnterior;
+                  }, 500);
                 }}
                 className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
               >
@@ -987,10 +1025,20 @@ export default function ECOE() {
             </div>
           </div>
 
-          <div id="contenedor-analisis-impresion">
+          <div id="contenedor-analisis-impresion" className="space-y-4">
+            {/* Cabecera visible dentro del documento impreso/PDF */}
+            <div className="hidden print:block bg-slate-100 p-4 rounded-xl border border-slate-300 mb-4">
+              <h1 className="text-sm font-bold text-slate-900">
+                Reporte de Análisis ECOE — {dniFiltroAnalisis ? (listaEstudiantes?.find(e => e.dni === dniFiltroAnalisis)?.alumno || dniFiltroAnalisis) : 'Vista Global (Todos los alumnos)'}
+              </h1>
+              <p className="text-[10px] text-slate-500">Sistema PFO - Medicina | Fecha de emisión: {new Date().toLocaleDateString()}</p>
+            </div>
+
             <VistaAnalisisResultados 
               datosPorEstacion={datosPorEstacion} 
+              resultadosMap={resultadosMap}
               dniFiltro={dniFiltroAnalisis} 
+              listaEstudiantes={listaEstudiantes}
             />
           </div>
         </div>
@@ -1146,8 +1194,10 @@ export default function ECOE() {
  
       {estudianteSeleccionado && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 contenedor-modal-ecoe">
-          <div id="modal-evaluacion-contenido" className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6">
- 
+          <div
+             id="modal-evaluacion-contenido"
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6"
+            >
             <MembretePDF />
  
             <div className="flex justify-between items-start border-b border-slate-100 pb-4">
