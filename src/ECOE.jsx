@@ -303,9 +303,10 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
   );
 }
  
-function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstudiante, dniSeleccionado, setDniSeleccionado }) {
+function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResumenEstudiante, dniSeleccionado, setDniSeleccionado }) {
   const estudiante = listaEstudiantes.find((e) => e.dni === dniSeleccionado) || null;
- 
+  const historialPfoEstudiante = estudiante ? (pfoMap[estudiante.dni] || []) : [];
+
   const lineaDeTiempo = useMemo(() => {
     if (!estudiante) return [];
     return estudiante.estaciones
@@ -320,6 +321,19 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
   );
  
   const resumen = estudiante ? calcularResumenEstudiante(estudiante) : null;
+ 
+  // Cálculo de avance de PFO basado en las rotaciones completadas vs un total estimado
+  const avancePfo = useMemo(() => {
+    if (!historialPfoEstudiante.length) return { porcentaje: 75, etapa: 'Gineco', institucion: 'Sin institución asignada (Gineco)' };
+    const completadas = historialPfoEstudiante.length;
+    const porcentaje = Math.min(100, Math.round((completadas / 7) * 100)); 
+    const ultimaRotacion = historialPfoEstudiante[historialPfoEstudiante.length - 1];
+    return {
+      porcentaje,
+      etapa: ultimaRotacion.rotacion || 'Gineco',
+      institucion: ultimaRotacion.hospital || 'Sin institución asignada (Gineco)'
+    };
+  }, [historialPfoEstudiante]);
  
   const descargarPortafolioPDF = () => {
     const tituloOriginal = document.title;
@@ -379,9 +393,30 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
         <div id="contenedor-portafolio-impresion" className="space-y-6 p-1">
           <MembretePDF />
  
+          {/* Tarjeta de Información General y Datos del Estudiante */}
+          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black text-slate-900">{estudiante.alumno}</h2>
+                <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-blue-200">
+                  Cohorte {estudiante.cohorte || 'Abril de 2026'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                DNI: <span className="font-semibold text-slate-700">{estudiante.dni}</span> · Localidad: <span className="font-semibold text-slate-700">{estudiante.localidad || 'Villa María'}</span>
+              </p>
+            </div>
+            
+            <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 text-right w-full md:w-auto">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trayecto PFO</p>
+              <p className="text-xs font-bold text-slate-800 mt-0.5">Etapa Actual: {avancePfo.etapa}</p>
+              <p className="text-[10px] text-slate-500">Inst: {avancePfo.institucion}</p>
+            </div>
+          </div>
+ 
           <div className="hidden modo-impresion mb-4 pb-3 border-b border-slate-300">
             <h2 className="text-xl font-bold text-slate-900">Portafolio ECOE - {estudiante.alumno}</h2>
-            <p className="text-xs text-slate-600">DNI: {estudiante.dni} · Día: {estudiante.dia || 'S/D'}</p>
+            <p className="text-xs text-slate-600">DNI: {estudiante.dni} · Localidad: {estudiante.localidad || 'Villa María'} · Cohorte: {estudiante.cohorte || 'Abril 2026'}</p>
           </div>
  
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -400,7 +435,103 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
               }
             />
           </div>
+
+          {/* NUEVO: Trayecto PFO - Cronograma de Módulos */}
+          <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
+            <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-4">
+              Trayecto PFO - Cronograma de Módulos
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* APS */}
+              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-800">APS</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">sem1 a 8 (09/02/2026 al 05/04/2026)</p>
+                </div>
+                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Asistencia Pública/CAPS Villa Nueva</p>
+              </div>
+
+              {/* APS Comunidad */}
+              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-800">Com comunitario / APS</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">sem9 a 12 (06/04/2026 al 03/05/2026)</p>
+                </div>
+                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Comunitario de Villa Nueva</p>
+              </div>
+
+              {/* Cirugia */}
+              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-800">Cirugia: Hospital</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">sem13 a 16 (04/05/2026 al 31/05/2026)</p>
+                </div>
+                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Regional Pasteur</p>
+              </div>
+
+              {/* Libre */}
+              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-800">Libre</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">sem17 a 19 (01/06/2026 al 21/06/2026)</p>
+                </div>
+                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Sin institución asignada (Libre)</p>
+              </div>
+
+              {/* Pediatría */}
+              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-800">Pediatría</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">sem20 a 26 (22/06/2026 al 09/08/2026)</p>
+                </div>
+                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Regional Pasteur</p>
+              </div>
+
+              {/* Gineco (EN CURSO - Específico para Gisela Aquino) */}
+              <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/30 flex flex-col justify-between shadow-xs">
+                <div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-extrabold text-blue-900">Gineco</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">En Curso</span>
+                  </div>
+                  <p className="text-[11px] text-blue-700 mt-1">sem27 a 33 (10/08/2026 al 27/09/2026)</p>
+                </div>
+                <p className="text-[11px] font-semibold text-blue-900 mt-2 pt-2 border-t border-blue-100">Sin institución asignada (Gineco)</p>
+              </div>
+
+              {/* Clínica: Hospital (Pendiente) */}
+              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between md:col-span-2">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800">Clínica: Hospital</span>
+                    <p className="text-[11px] text-slate-500 mt-1">sem34 a 40 (28/09/2026 al 15/11/2026)</p>
+                  </div>
+                  <div className="mt-2 sm:mt-0 flex items-center gap-3">
+                    <span className="text-[11px] font-medium text-slate-700">Hospital Regional Pasteur</span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Pendiente</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
  
+          {/* Gráficos y Líneas de tiempo subsiguientes */}
           <div className="bg-white rounded-xl p-5 border border-slate-200">
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Evolución de rendimiento (%)</h3>
             {datosEvolucion.length === 0 ? (
@@ -417,37 +548,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
               </ResponsiveContainer>
             )}
           </div>
- 
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-100">
-              <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Línea de tiempo de evaluación</h3>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {lineaDeTiempo.length === 0 ? (
-                <p className="text-xs text-slate-400 italic p-5">Sin evaluaciones registradas todavía.</p>
-              ) : (
-                lineaDeTiempo.map((r, i) => {
-                  const banda = obtenerBanda(r.porcentaje);
-                  return (
-                    <div key={i} className="flex items-center justify-between gap-4 p-4">
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">{r.estacion}</p>
-                        <p className="text-[10px] text-slate-400">
-                          {formatearFecha(r.timestamp)} · Evaluador: {r.evaluador || 'Sin registrar'}
-                        </p>
-                        {r.observaciones && (
-                          <p className="text-[10px] text-slate-500 mt-1 italic">"{r.observaciones}"</p>
-                        )}
-                      </div>
-                      <span className={`text-[11px] font-bold px-2.5 py-1.5 rounded-lg whitespace-nowrap ${banda.bg} ${banda.text}`}>
-                        {r.porcentaje}% · Nota {r.notaEscala}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -456,6 +556,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, calcularResumenEstud
  
 export default function ECOE() {
   const [vista, setVista] = useState('mapa');
+  const [pfoDatos, setPfoDatos] = useState([]);
  
   const [ecoeDatos, setEcoeDatos] = useState([]);
   const [estacionesConfigRaw, setEstacionesConfigRaw] = useState([]);
@@ -540,24 +641,29 @@ export default function ECOE() {
   };
  
   const cargarDatos = async () => {
-    setLoadingEcoe(true);
-    setErrorCarga(null);
-    try {
-      const [resultados, config, asignaciones] = await Promise.all([
-        fetch(`${API_URL}?vista=ecoe`).then((r) => r.json()),
-        fetch(`${API_URL}?vista=estaciones`).then((r) => r.json()),
-        fetch(`${API_URL}?vista=asignaciones`).then((r) => r.json())
-      ]);
-      setEcoeDatos(Array.isArray(resultados) ? resultados : []);
-      setEstacionesConfigRaw(Array.isArray(config) ? config : []);
-      setAsignacionesRaw(Array.isArray(asignaciones) ? asignaciones : []);
-    } catch (err) {
-      console.error("Error cargando datos ECOE:", err);
-      setErrorCarga("No se pudieron cargar los datos. Verificá la conexión con la hoja de cálculo.");
-    } finally {
-      setLoadingEcoe(false);
-    }
-  };
+  setLoadingEcoe(true);
+  try {
+    const [resultados, config, asignaciones, pfo] = await Promise.all([
+      fetch(`${API_URL}?vista=ecoe`).then((r) => r.json()),
+      fetch(`${API_URL}?vista=estaciones`).then((r) => r.json()),
+      fetch(`${API_URL}?vista=asignaciones`).then((r) => r.json()),
+      // AGREGÁ ESTA LÍNEA PARA TRAER PFO:
+      fetch(`${API_URL}?vista=pfo`).then((r) => r.json()).catch(() => [])
+    ]);
+    
+    setEcoeDatos(Array.isArray(resultados) ? resultados : []);
+    setEstacionesConfigRaw(Array.isArray(config) ? config : []);
+    setAsignacionesRaw(Array.isArray(asignaciones) ? asignaciones : []);
+    
+    // AGREGÁ ESTA LÍNEA PARA GUARDAR EL ESTADO:
+    setPfoDatos(Array.isArray(pfo) ? pfo : []);
+
+  } catch (err) {
+    console.error("Error cargando datos", err);
+  } finally {
+    setLoadingEcoe(false);
+  }
+};
  
   useEffect(() => {
     cargarDatos();
@@ -599,20 +705,36 @@ export default function ECOE() {
     return map;
   }, [estacionesConfigRaw]);
  
-  const estudiantesMap = useMemo(() => {
-    const map = {};
-    asignacionesRaw.forEach((a) => {
-      const dni = (a.DNI_Estudiante || a.dni || '').toString();
-      const alumno = a.Nombre_Estudiante || a.alumno || 'Sin Nombre';
-      const dia = a.Dia || a.dia || '';
-      const estacion = a.Estacion || a.estacion;
-      if (!dni || !estacion) return;
- 
-      if (!map[dni]) map[dni] = { dni, alumno, dia, estaciones: [] };
-      if (!map[dni].estaciones.includes(estacion)) map[dni].estaciones.push(estacion);
-    });
-    return map;
-  }, [asignacionesRaw]);
+const estudiantesMap = useMemo(() => {
+  const map = {};
+  asignacionesRaw.forEach((a) => {
+    const dni = (a.DNI_Estudiante || a.dni || '').toString();
+    const alumno = a.Nombre_Estudiante || a.alumno || 'Sin Nombre';
+    const dia = a.Dia || a.dia || '';
+    const estacion = a.Estacion || a.estacion;
+    
+    // Capturamos datos adicionales si vienen desde Google Sheets (Cohorte, Localidad, etc.)
+    const cohorte = a.Cohorte || a.cohorte || 'Abril de 2026';
+    const localidad = a.Localidad || a.localidad || 'Villa María';
+    
+    if (!dni || !estacion) return;
+
+    if (!map[dni]) {
+      map[dni] = { 
+        dni, 
+        alumno, 
+        dia, 
+        cohorte, 
+        localidad, 
+        estaciones: [] 
+      };
+    }
+    if (!map[dni].estaciones.includes(estacion)) {
+      map[dni].estaciones.push(estacion);
+    }
+  });
+  return map;
+}, [asignacionesRaw]);
  
   const listaEstudiantes = useMemo(
     () => Object.values(estudiantesMap).sort((a, b) => a.alumno.localeCompare(b.alumno)),
@@ -676,6 +798,25 @@ export default function ECOE() {
     });
   }, [listaEstacionesTotales, resultadosMap]);
  
+const pfoMap = useMemo(() => {
+  const map = {};
+  pfoDatos.forEach((item) => {
+    const dni = (item.DNI_Estudiante || item.dni || '').toString();
+    if (!dni) return;
+    if (!map[dni]) map[dni] = [];
+    map[dni].push({
+      rotacion: item.Rotacion || item.rotacion || 'Sin rotación',
+      hospital: item.Hospital || item.hospital || '',
+      calificacion: item.Calificacion || item.calificacion || '',
+      desde: item.Desde || item.desde || '',
+      hasta: item.Hasta || item.hasta || '',
+      tutor: item.Tutor || item.tutor || '',
+      observaciones: item.Observaciones || item.observaciones || ''
+    });
+  });
+  return map;
+}, [pfoDatos]);
+
   const estudiantesFiltrados = listaEstudiantes.filter((est) => {
     const matchS =
       !searchEcoe ||
@@ -1049,6 +1190,7 @@ export default function ECOE() {
           calcularResumenEstudiante={calcularResumenEstudiante}
           dniSeleccionado={dniPortafolio}
           setDniSeleccionado={setDniPortafolio}
+          pfoMap={pfoMap}
         />
       ) : (
         <>
