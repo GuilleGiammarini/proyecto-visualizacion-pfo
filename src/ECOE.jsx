@@ -263,42 +263,69 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
         </div>
       </div>
  
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100">
-          <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Resumen por estación</h3>
-        </div>
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              <th className="p-3">Estación</th>
-              <th className="p-3 text-center">Evaluados</th>
-              <th className="p-3 text-center">Promedio / Calificación</th>
-              <th className="p-3 text-center">Estado</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {datosCalculados.map((d, i) => {
-              const banda = obtenerBanda(d.promedio);
-              return (
-                <tr key={i}>
-                  <td className="p-3 font-semibold text-slate-700">{d.estacion}</td>
-                  <td className="p-3 text-center text-slate-500">{d.evaluados}</td>
-                  <td className="p-3 text-center font-bold text-slate-700">{d.evaluados > 0 ? `${d.promedio}%` : '—'}</td>
-                  <td className="p-3 text-center">
-                    {d.evaluados > 0 ? (
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${banda.bg} ${banda.text}`}>
-                        {banda.nombre}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-300">Sin datos</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+<div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+  <div className="px-3 py-1.5 border-b border-slate-100">
+    <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+      Resumen por estación
+    </h3>
+  </div>
+
+  <table className="w-full text-left text-[9px]">
+    <thead>
+      <tr className="bg-slate-50 text-[8px] font-bold text-slate-500 uppercase tracking-wider">
+        <th className="px-1 py-1">Estación</th>
+        <th className="px-1 py-1 text-center">Eval.</th>
+        <th className="px-1 py-1 text-center">Prom / Nota</th>
+        <th className="px-1 py-1 text-center">Estado</th>
+      </tr>
+    </thead>
+
+    <tbody className="divide-y divide-slate-100">
+      {datosCalculados.map((d, i) => {
+        const banda = obtenerBanda(d.promedio);
+
+        return (
+          <tr key={i} className="hover:bg-slate-50/50">
+            <td className="px-1 py-1 font-semibold text-slate-700 leading-tight">
+              {d.estacion}
+            </td>
+
+            <td className="px-1 py-1 text-center text-slate-500">
+              {d.evaluados}
+            </td>
+
+            {/* Celda compacta para porcentaje y nota */}
+            <td className="px-1 py-1 text-center font-bold text-slate-700">
+              {d.evaluados > 0 ? (
+                <span className="inline-flex items-center gap-1 bg-slate-100 px-1 py-0.5 rounded text-[8px]">
+                  <span>{d.promedio}%</span>
+                  <span className="text-slate-400 font-normal">|</span>
+                  <span>N: {d.nota ?? '—'}</span>
+                </span>
+              ) : (
+                '—'
+              )}
+            </td>
+
+            <td className="px-1 py-1 text-center">
+              {d.evaluados > 0 ? (
+                <span
+                  className={`inline-block text-[8px] font-bold px-1 py-0.5 rounded ${banda.bg} ${banda.text}`}
+                >
+                  {banda.nombre}
+                </span>
+              ) : (
+                <span className="text-[8px] text-slate-300">
+                  Sin datos
+                </span>
+              )}
+            </td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>
     </div>
   );
 }
@@ -1261,7 +1288,7 @@ const pfoMap = useMemo(() => {
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                       <th className="p-3 sticky left-0 bg-slate-50 z-10 ecoe-col-estudiante">Estudiante / Día</th>
                       {columnasEstaciones.map((est, i) => (
-                        <th key={i} className="p-3 text-center min-w-[120px] truncate max-w-[140px]" title={est}>
+                        <th key={i} className="p-3 text-center min-w-[50px] truncate max-w-[60px]" title={est}>
                           {est}
                         </th>
                       ))}
@@ -1286,15 +1313,15 @@ const pfoMap = useMemo(() => {
                             const resultado = resultadosMap[`${est.dni}__${estacion}`];
                             const estado = obtenerEstadoCelda(resultado, asignada);
                             return (
-                              <td key={eIdx} className="p-2 text-center">
+                              <td key={eIdx} className="p-0.5 text-center">
                                 <div
-                                  className={`rounded-lg py-1.5 px-2 text-[11px] shadow-sm flex flex-col items-center justify-center gap-0.5 ${asignada ? 'cursor-pointer hover:scale-105' : ''} transition-transform ${estado.color}`}
+                                  className={`rounded-lg py-0.5 px-0.5 text-[9px] shadow-sm flex flex-col items-center justify-center gap-0 ${asignada ? 'cursor-pointer hover:scale-105' : ''} transition-transform ${estado.color}`}
                                   title={asignada ? `${estacion}: ${estado.label} (${estado.notaLabel}) — click para evaluar` : `${estacion}: no asignada`}
                                   onClick={() => asignada && abrirEstudiante(est, estacion)}
                                 >
                                   <span>{estado.label}</span>
                                   {estado.notaLabel && (
-                                    <span className="text-[10px] opacity-95 font-semibold bg-black/10 px-1.5 rounded">
+                                    <span className="text-[8px] opacity-95 font-semibold bg-black/10 px-1 rounded">
                                       {estado.notaLabel}
                                     </span>
                                   )}
@@ -1302,7 +1329,7 @@ const pfoMap = useMemo(() => {
                               </td>
                             );
                           })}
-                          <td className="p-2 text-center">
+                          <td className="p-1 text-center">
                             <span
                               className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
                                 resumen.resultadoFinal === 'Aprobado'
