@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
-import MapResizeHelper from './components/MapResizeHelper';
+import MapResizeHelper from './components/Mapresizehelper';
 import {
   API_URL,
   obtenerCoordenadas,
