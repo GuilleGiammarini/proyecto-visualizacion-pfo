@@ -5,7 +5,7 @@ import ECOE from './ECOE';
 
 const SECCIONES = [
   { id: 'estudiantes', label: '🎓 Estudiantes' },
-  { id: 'convenios', label: '📄 Convenios' },
+  { id: 'Convenios', label: '📄 Convenios' },
   { id: 'ecoe', label: '🩺 ECOE' }
 ];
 
