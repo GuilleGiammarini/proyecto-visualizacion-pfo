@@ -48,7 +48,7 @@ export default function App() {
         </div>
 
         {seccionPrincipal === 'estudiantes' && <Estudiantes />}
-        {seccionPrincipal === 'convenios' && <Convenios />}
+        {seccionPrincipal === 'Convenios' && <Convenios />}
         {seccionPrincipal === 'ecoe' && <ECOE />}
 
       </div>
