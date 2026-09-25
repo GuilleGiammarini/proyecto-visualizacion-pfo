@@ -143,52 +143,138 @@ function TarjetaMetrica({ etiqueta, valor, detalle, acento }) {
   );
 }
  
-function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, listaEstudiantes }) {
+function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, listaEstudiantes, diaFiltro }) {
   const datosCalculados = useMemo(() => {
-    if (!dniFiltro) return datosPorEstacion;
+    /*
+     * Las estaciones que aparecen en el análisis se determinan a partir
+     * de las estaciones asignadas al/los estudiante/s que quedan activos
+     * por los filtros.
+     *
+     * Esto hace que el radar no muestre estaciones de otros días.
+     */
+    let estudiantesFiltrados = listaEstudiantes;
 
-    const estudianteObj = listaEstudiantes.find(e => e.dni === dniFiltro);
-    if (!estudianteObj) return datosPorEstacion;
+    if (dniFiltro) {
+      estudiantesFiltrados = listaEstudiantes.filter((e) => e.dni === dniFiltro);
+    }
 
-    return datosPorEstacion.map((d) => {
-      const res = resultadosMap[`${dniFiltro}__${d.estacion}`];
+    if (diaFiltro) {
+      estudiantesFiltrados = estudiantesFiltrados.filter(
+        (e) => normalizarTexto(e.dia) === normalizarTexto(diaFiltro)
+      );
+    }
+
+    // Sin filtros: comportamiento original, todas las estaciones.
+    if (!dniFiltro && !diaFiltro) {
+      return datosPorEstacion;
+    }
+
+    // Determinamos las estaciones activas según los estudiantes que quedaron
+    // seleccionados. La fuente es estudiantesMap -> e.estaciones.
+    const estacionesActivas = new Set(
+      estudiantesFiltrados.flatMap((e) => e.estaciones || [])
+    );
+
+    // Si se seleccionó un DNI que no pertenece al día seleccionado,
+    // no quedan estudiantes/estaciones activas.
+    if (estudiantesFiltrados.length === 0) {
+      return [];
+    }
+
+    // Filtramos la estructura base para que RadarChart, BarChart y tabla
+    // trabajen únicamente con las estaciones correspondientes al filtro.
+    const datosFiltrados = datosPorEstacion.filter((d) =>
+      estacionesActivas.has(d.estacion)
+    );
+
+    if (dniFiltro) {
+      const estudianteObj = estudiantesFiltrados[0];
+
+      return datosFiltrados.map((d) => {
+        const res = resultadosMap[`${dniFiltro}__${d.estacion}`];
+
+        return {
+          estacion: d.estacion,
+          promedio: res ? res.porcentaje : 0,
+          evaluados: res ? 1 : 0,
+          estado: res ? res.estado : 'Sin datos',
+          nota: res ? res.notaEscala : '—'
+        };
+      });
+    }
+
+    // Filtro únicamente por día:
+    // agrupamos los resultados de todos los estudiantes de ese día.
+    const dnisDelDia = new Set(estudiantesFiltrados.map((e) => e.dni));
+
+    return datosFiltrados.map((d) => {
+      const resultadosDelDia = Object.values(resultadosMap).filter(
+        (r) => r.estacion === d.estacion && dnisDelDia.has(r.dni)
+      );
+
+      const promedio =
+        resultadosDelDia.length > 0
+          ? Math.round(
+              resultadosDelDia.reduce((acc, r) => acc + r.porcentaje, 0) /
+                resultadosDelDia.length
+            )
+          : 0;
+
+      const aprobados = resultadosDelDia.filter(
+        (r) => r.porcentaje >= UMBRAL_APROBACION_ESTACION
+      ).length;
+
       return {
         estacion: d.estacion,
-        promedio: res ? res.porcentaje : 0,
-        evaluados: res ? 1 : 0,
-        estado: res ? res.estado : 'Sin datos',
-        nota: res ? res.notaEscala : '—'
+        promedio,
+        evaluados: resultadosDelDia.length,
+        estado:
+          resultadosDelDia.length > 0
+            ? aprobados === resultadosDelDia.length
+              ? 'Aprobado'
+              : 'Desaprobado'
+            : 'Sin datos',
+        nota:
+          resultadosDelDia.length > 0
+            ? obtenerNotaEscala(promedio)
+            : '—'
       };
     });
-  }, [datosPorEstacion, dniFiltro, resultadosMap, listaEstudiantes]);
+  }, [
+    datosPorEstacion,
+    dniFiltro,
+    diaFiltro,
+    resultadosMap,
+    listaEstudiantes
+  ]);
 
   const hayDatos = datosCalculados.some((d) => d.evaluados > 0);
- 
+
   const promedioGeneral = useMemo(() => {
     const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return 0;
     return Math.round(conDatos.reduce((acc, d) => acc + d.promedio, 0) / conDatos.length);
   }, [datosCalculados]);
- 
+
   const estacionMasDificil = useMemo(() => {
     const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return null;
     return conDatos.reduce((min, d) => (d.promedio < min.promedio ? d : min), conDatos[0]);
   }, [datosCalculados]);
- 
+
   const estacionMasFacil = useMemo(() => {
     const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return null;
     return conDatos.reduce((max, d) => (d.promedio > max.promedio ? d : max), conDatos[0]);
   }, [datosCalculados]);
- 
+
   const tasaAprobacion = useMemo(() => {
     const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
     if (conDatos.length === 0) return 0;
     const promedioAprobado = conDatos.filter((d) => d.promedio >= UMBRAL_APROBACION_ESTACION).length;
     return Math.round((promedioAprobado / conDatos.length) * 100);
   }, [datosCalculados]);
- 
+
   if (!hayDatos) {
     return (
       <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
@@ -198,7 +284,7 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
       </div>
     );
   }
- 
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -221,7 +307,7 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
           acento="text-emerald-600"
         />
       </div>
- 
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
@@ -243,7 +329,7 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
             </RadarChart>
           </ResponsiveContainer>
         </div>
- 
+
         <div className="bg-white rounded-xl p-5 border border-slate-200">
           <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">
             Comparativa de puntuaciones por estación
@@ -263,7 +349,7 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
           </ResponsiveContainer>
         </div>
       </div>
- 
+
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-3 py-1.5 border-b border-slate-100">
           <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
@@ -329,7 +415,7 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
     </div>
   );
 }
- 
+
 function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResumenEstudiante, dniSeleccionado, setDniSeleccionado }) {
   const estudiante = listaEstudiantes.find((e) => e.dni === dniSeleccionado) || null;
   const historialPfoEstudiante = estudiante ? (pfoMap[estudiante.dni] || []) : [];
@@ -591,6 +677,7 @@ export default function ECOE() {
  
   const [dniPortafolio, setDniPortafolio] = useState('');
   const [dniFiltroAnalisis, setDniFiltroAnalisis] = useState('');
+  const [diaFiltroAnalisis, setDiaFiltroAnalisis] = useState('');
  
   const [colaPendientes, setColaPendientes] = useState(() => {
     try {
@@ -803,6 +890,22 @@ export default function ECOE() {
     () => Object.values(estudiantesMap).sort((a, b) => a.alumno.localeCompare(b.alumno)),
     [estudiantesMap]
   );
+
+  const listaDiasAnalisis = useMemo(() => {
+    const dias = new Map();
+
+    listaEstudiantes.forEach((est) => {
+      const diaOriginal = (est.dia || '').toString().trim();
+      if (!diaOriginal) return;
+
+      const clave = normalizarTexto(diaOriginal);
+      if (!dias.has(clave)) dias.set(clave, diaOriginal);
+    });
+
+    return Array.from(dias.values()).sort((a, b) =>
+      a.localeCompare(b, 'es-AR', { numeric: true })
+    );
+  }, [listaEstudiantes]);
  
   const listaEstacionesTotales = useMemo(() => {
     const set = new Set();
@@ -1218,10 +1321,25 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 no-imprimir">
             <div>
               <h3 className="text-sm font-bold text-slate-800">Panel de Análisis y Estadísticas ECOE</h3>
-              <p className="text-xs text-slate-500">Métricas de rendimiento global o filtradas por estudiante.</p>
+              <p className="text-xs text-slate-500">
+                Métricas de rendimiento global o filtradas por estudiante y/o día.
+              </p>
             </div>
-            
-            <div className="flex items-center gap-3">
+
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              <select
+                value={diaFiltroAnalisis || ''}
+                onChange={(e) => setDiaFiltroAnalisis(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">-- Todos los días --</option>
+                {listaDiasAnalisis.map((dia) => (
+                  <option key={dia} value={dia}>
+                    Día: {dia}
+                  </option>
+                ))}
+              </select>
+
               <select
                 value={dniFiltroAnalisis || ''}
                 onChange={(e) => setDniFiltroAnalisis(e.target.value)}
@@ -1237,16 +1355,24 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
 
               <button
                 onClick={() => {
-                  const alumnoSeleccionado = listaEstudiantes?.find(e => e.dni === dniFiltroAnalisis);
-                  const nombreReporte = alumnoSeleccionado ? alumnoSeleccionado.alumno : 'Global';
+                  const alumnoSeleccionado = listaEstudiantes?.find(
+                    (e) => e.dni === dniFiltroAnalisis
+                  );
+                  const nombreAlumno = alumnoSeleccionado
+                    ? alumnoSeleccionado.alumno
+                    : 'Todos los alumnos';
+                  const nombreDia = diaFiltroAnalisis
+                    ? ` - Día ${diaFiltroAnalisis}`
+                    : '';
+
                   const tituloAnterior = document.title;
-                  document.title = `Análisis - ${nombreReporte}`;
+                  document.title = `Análisis - ${nombreAlumno}${nombreDia}`;
 
                   const contenedor = document.getElementById('contenedor-analisis-impresion');
                   contenedor.classList.add('modo-impresion');
-                  
+
                   window.print();
-                  
+
                   setTimeout(() => {
                     contenedor.classList.remove('modo-impresion');
                     document.title = tituloAnterior;
@@ -1262,15 +1388,23 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
           <div id="contenedor-analisis-impresion" className="space-y-4">
             <div className="hidden print:block bg-slate-100 p-4 rounded-xl border border-slate-300 mb-4">
               <h1 className="text-sm font-bold text-slate-900">
-                Reporte de Análisis ECOE — {dniFiltroAnalisis ? (listaEstudiantes?.find(e => e.dni === dniFiltroAnalisis)?.alumno || dniFiltroAnalisis) : 'Vista Global (Todos los alumnos)'}
+                Reporte de Análisis ECOE — {
+                  dniFiltroAnalisis
+                    ? (listaEstudiantes?.find(e => e.dni === dniFiltroAnalisis)?.alumno || dniFiltroAnalisis)
+                    : 'Vista Global (Todos los alumnos)'
+                }
+                {diaFiltroAnalisis ? ` — Día ${diaFiltroAnalisis}` : ''}
               </h1>
-              <p className="text-[10px] text-slate-500">Sistema PFO - Medicina | Fecha de emisión: {new Date().toLocaleDateString()}</p>
+              <p className="text-[10px] text-slate-500">
+                Sistema PFO - Medicina | Fecha de emisión: {new Date().toLocaleDateString()}
+              </p>
             </div>
 
             <VistaAnalisisResultados 
               datosPorEstacion={datosPorEstacion} 
               resultadosMap={resultadosMap}
-              dniFiltro={dniFiltroAnalisis} 
+              dniFiltro={dniFiltroAnalisis}
+              diaFiltro={diaFiltroAnalisis}
               listaEstudiantes={listaEstudiantes}
             />
           </div>
