@@ -12,7 +12,8 @@ const API_URL = "https://script.google.com/macros/s/AKfycby-qfURF_V4SjrHJIbr7_O-
 const UMBRAL_APROBACION_ESTACION = 60;
 const PORCENTAJE_MIN_ESTACIONES_APROBADAS = 0.70;
 const PROMEDIO_MIN_EXAMEN = 60;
-const NOTA_MAXIMA_ITEM = 5;
+const ESCALA_ITEM_DEFAULT = 1;
+const NOTA_MAXIMA_ITEM = 1;
  
 const MARCA = {
   navy: '#1c3f66',
@@ -56,7 +57,7 @@ const normalizarNota = (valor) => {
   if (typeof valor === 'boolean') return valor ? NOTA_MAXIMA_ITEM : 0;
   const num = parseFloat(valor);
   if (isNaN(num)) return 0;
-  return Math.min(NOTA_MAXIMA_ITEM, Math.max(0, num));
+  return Math.min(2, Math.max(0, num)); // Permite hasta 2 en ítems especiales pareados
 };
  
 const formatearFecha = (iso) => {
@@ -143,9 +144,8 @@ function TarjetaMetrica({ etiqueta, valor, detalle, acento }) {
 }
  
 function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, listaEstudiantes }) {
-  // Si hay un DNI seleccionado, filtramos los resultados de ese estudiante
   const datosCalculados = useMemo(() => {
-    if (!dniFiltro) return datosPorEstacion; // Modo global
+    if (!dniFiltro) return datosPorEstacion;
 
     const estudianteObj = listaEstudiantes.find(e => e.dni === dniFiltro);
     if (!estudianteObj) return datosPorEstacion;
@@ -156,7 +156,8 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
         estacion: d.estacion,
         promedio: res ? res.porcentaje : 0,
         evaluados: res ? 1 : 0,
-        estado: res ? res.estado : 'Sin datos'
+        estado: res ? res.estado : 'Sin datos',
+        nota: res ? res.notaEscala : '—'
       };
     });
   }, [datosPorEstacion, dniFiltro, resultadosMap, listaEstudiantes]);
@@ -263,69 +264,68 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
         </div>
       </div>
  
-<div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-  <div className="px-3 py-1.5 border-b border-slate-100">
-    <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
-      Resumen por estación
-    </h3>
-  </div>
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-3 py-1.5 border-b border-slate-100">
+          <h3 className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+            Resumen por estación
+          </h3>
+        </div>
 
-  <table className="w-full text-left text-[9px]">
-    <thead>
-      <tr className="bg-slate-50 text-[8px] font-bold text-slate-500 uppercase tracking-wider">
-        <th className="px-1 py-1">Estación</th>
-        <th className="px-1 py-1 text-center">Eval.</th>
-        <th className="px-1 py-1 text-center">Prom / Nota</th>
-        <th className="px-1 py-1 text-center">Estado</th>
-      </tr>
-    </thead>
+        <table className="w-full text-left text-[9px]">
+          <thead>
+            <tr className="bg-slate-50 text-[8px] font-bold text-slate-500 uppercase tracking-wider">
+              <th className="px-1 py-1">Estación</th>
+              <th className="px-1 py-1 text-center">Eval.</th>
+              <th className="px-1 py-1 text-center">Prom / Nota</th>
+              <th className="px-1 py-1 text-center">Estado</th>
+            </tr>
+          </thead>
 
-    <tbody className="divide-y divide-slate-100">
-      {datosCalculados.map((d, i) => {
-        const banda = obtenerBanda(d.promedio);
+          <tbody className="divide-y divide-slate-100">
+            {datosCalculados.map((d, i) => {
+              const banda = obtenerBanda(d.promedio);
 
-        return (
-          <tr key={i} className="hover:bg-slate-50/50">
-            <td className="px-1 py-1 font-semibold text-slate-700 leading-tight">
-              {d.estacion}
-            </td>
+              return (
+                <tr key={i} className="hover:bg-slate-50/50">
+                  <td className="px-1 py-1 font-semibold text-slate-700 leading-tight">
+                    {d.estacion}
+                  </td>
 
-            <td className="px-1 py-1 text-center text-slate-500">
-              {d.evaluados}
-            </td>
+                  <td className="px-1 py-1 text-center text-slate-500">
+                    {d.evaluados}
+                  </td>
 
-            {/* Celda compacta para porcentaje y nota */}
-            <td className="px-1 py-1 text-center font-bold text-slate-700">
-              {d.evaluados > 0 ? (
-                <span className="inline-flex items-center gap-1 bg-slate-100 px-1 py-0.5 rounded text-[8px]">
-                  <span>{d.promedio}%</span>
-                  <span className="text-slate-400 font-normal">|</span>
-                  <span>N: {d.nota ?? '—'}</span>
-                </span>
-              ) : (
-                '—'
-              )}
-            </td>
+                  <td className="px-1 py-1 text-center font-bold text-slate-700">
+                    {d.evaluados > 0 ? (
+                      <span className="inline-flex items-center gap-1 bg-slate-100 px-1 py-0.5 rounded text-[8px]">
+                        <span>{d.promedio}%</span>
+                        <span className="text-slate-400 font-normal">|</span>
+                        <span>N: {d.nota ?? '—'}</span>
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
 
-            <td className="px-1 py-1 text-center">
-              {d.evaluados > 0 ? (
-                <span
-                  className={`inline-block text-[8px] font-bold px-1 py-0.5 rounded ${banda.bg} ${banda.text}`}
-                >
-                  {banda.nombre}
-                </span>
-              ) : (
-                <span className="text-[8px] text-slate-300">
-                  Sin datos
-                </span>
-              )}
-            </td>
-          </tr>
-        );
-      })}
-    </tbody>
-  </table>
-</div>
+                  <td className="px-1 py-1 text-center">
+                    {d.evaluados > 0 ? (
+                      <span
+                        className={`inline-block text-[8px] font-bold px-1 py-0.5 rounded ${banda.bg} ${banda.text}`}
+                      >
+                        {banda.nombre}
+                      </span>
+                    ) : (
+                      <span className="text-[8px] text-slate-300">
+                        Sin datos
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -349,7 +349,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
  
   const resumen = estudiante ? calcularResumenEstudiante(estudiante) : null;
  
-  // Cálculo de avance de PFO basado en las rotaciones completadas vs un total estimado
   const avancePfo = useMemo(() => {
     if (!historialPfoEstudiante.length) return { porcentaje: 75, etapa: 'Gineco', institucion: 'Sin institución asignada (Gineco)' };
     const completadas = historialPfoEstudiante.length;
@@ -420,7 +419,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
         <div id="contenedor-portafolio-impresion" className="space-y-6 p-1">
           <MembretePDF />
  
-          {/* Tarjeta de Información General y Datos del Estudiante */}
           <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -463,14 +461,12 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
             />
           </div>
 
-          {/* NUEVO: Trayecto PFO - Cronograma de Módulos */}
           <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-4">
               Trayecto PFO - Cronograma de Módulos
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* APS */}
               <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-center">
@@ -482,7 +478,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
                 <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Asistencia Pública/CAPS Villa Nueva</p>
               </div>
 
-              {/* APS Comunidad */}
               <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-center">
@@ -494,7 +489,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
                 <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Comunitario de Villa Nueva</p>
               </div>
 
-              {/* Cirugia */}
               <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-center">
@@ -506,7 +500,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
                 <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Regional Pasteur</p>
               </div>
 
-              {/* Libre */}
               <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-center">
@@ -518,7 +511,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
                 <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Sin institución asignada (Libre)</p>
               </div>
 
-              {/* Pediatría */}
               <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
                 <div>
                   <div className="flex justify-between items-center">
@@ -530,7 +522,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
                 <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Regional Pasteur</p>
               </div>
 
-              {/* Gineco (EN CURSO - Específico para Gisela Aquino) */}
               <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/30 flex flex-col justify-between shadow-xs">
                 <div>
                   <div className="flex justify-between items-center">
@@ -542,7 +533,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
                 <p className="text-[11px] font-semibold text-blue-900 mt-2 pt-2 border-t border-blue-100">Sin institución asignada (Gineco)</p>
               </div>
 
-              {/* Clínica: Hospital (Pendiente) */}
               <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between md:col-span-2">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
                   <div>
@@ -558,7 +548,6 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
             </div>
           </div>
  
-          {/* Gráficos y Líneas de tiempo subsiguientes */}
           <div className="bg-white rounded-xl p-5 border border-slate-200">
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Evolución de rendimiento (%)</h3>
             {datosEvolucion.length === 0 ? (
@@ -601,8 +590,6 @@ export default function ECOE() {
   const [guardando, setGuardando] = useState(false);
  
   const [dniPortafolio, setDniPortafolio] = useState('');
-  
-  // <-- AQUÍ SE MOVIÓ CORRECTAMENTE EL HOOK DENTRO DEL COMPONENTE -->
   const [dniFiltroAnalisis, setDniFiltroAnalisis] = useState('');
  
   const [colaPendientes, setColaPendientes] = useState(() => {
@@ -668,29 +655,26 @@ export default function ECOE() {
   };
  
   const cargarDatos = async () => {
-  setLoadingEcoe(true);
-  try {
-    const [resultados, config, asignaciones, pfo] = await Promise.all([
-      fetch(`${API_URL}?vista=ecoe`).then((r) => r.json()),
-      fetch(`${API_URL}?vista=estaciones`).then((r) => r.json()),
-      fetch(`${API_URL}?vista=asignaciones`).then((r) => r.json()),
-      // AGREGÁ ESTA LÍNEA PARA TRAER PFO:
-      fetch(`${API_URL}?vista=pfo`).then((r) => r.json()).catch(() => [])
-    ]);
-    
-    setEcoeDatos(Array.isArray(resultados) ? resultados : []);
-    setEstacionesConfigRaw(Array.isArray(config) ? config : []);
-    setAsignacionesRaw(Array.isArray(asignaciones) ? asignaciones : []);
-    
-    // AGREGÁ ESTA LÍNEA PARA GUARDAR EL ESTADO:
-    setPfoDatos(Array.isArray(pfo) ? pfo : []);
+    setLoadingEcoe(true);
+    try {
+      const [resultados, config, asignaciones, pfo] = await Promise.all([
+        fetch(`${API_URL}?vista=ecoe`).then((r) => r.json()),
+        fetch(`${API_URL}?vista=estaciones`).then((r) => r.json()),
+        fetch(`${API_URL}?vista=asignaciones`).then((r) => r.json()),
+        fetch(`${API_URL}?vista=pfo`).then((r) => r.json()).catch(() => [])
+      ]);
+      
+      setEcoeDatos(Array.isArray(resultados) ? resultados : []);
+      setEstacionesConfigRaw(Array.isArray(config) ? config : []);
+      setAsignacionesRaw(Array.isArray(asignaciones) ? asignaciones : []);
+      setPfoDatos(Array.isArray(pfo) ? pfo : []);
 
-  } catch (err) {
-    console.error("Error cargando datos", err);
-  } finally {
-    setLoadingEcoe(false);
-  }
-};
+    } catch (err) {
+      console.error("Error cargando datos", err);
+    } finally {
+      setLoadingEcoe(false);
+    }
+  };
  
   useEffect(() => {
     cargarDatos();
@@ -698,70 +682,122 @@ export default function ECOE() {
  
   const estacionesConfigMap = useMemo(() => {
     const map = {};
+    
     estacionesConfigRaw.forEach((item) => {
       const estacion = item.Estacion || item.estacion;
       if (!estacion) return;
       const catNombre = item.Categoria || item.categoria || 'General';
       const puntajeMaxItem = parseFloat(item.Puntaje_Max || item.puntaje_max || 0) || 0;
- 
-      if (!map[estacion]) map[estacion] = { nombre: estacion, categorias: {}, puntajeMax: 0 };
+      
+      let descripcion = item.Item_Descripcion || item.item_descripcion || '';
+      let codigo = item.Item_Codigo || item.item_codigo || '';
+
+      const matchLetra = codigo.match(/\s+([a-zA-Z])$/) || descripcion.match(/\s+([a-zA-Z])$/);
+      const tieneLetraPar = !!matchLetra;
+      const letraActual = matchLetra ? matchLetra[1].toLowerCase() : '';
+
+      let codigoBase = codigo;
+      let descBase = descripcion;
+
+      if (tieneLetraPar) {
+        codigoBase = codigo.replace(/\s+[a-zA-Z]$/, '').trim();
+        descBase = descripcion.replace(/\s+[a-zA-Z]$/, '').trim();
+      }
+
+      if (!map[estacion]) {
+        map[estacion] = { nombre: estacion, categorias: {} };
+      }
+      
       if (!map[estacion].categorias[catNombre]) {
         map[estacion].categorias[catNombre] = {
           nombre: catNombre,
-          items: [],
-          puntajeMaxCategoria: 0,
+          itemsMap: {},
           orden: parseFloat(item.Orden_Categoria || item.orden_categoria || 0) || 0
         };
       }
- 
-      map[estacion].categorias[catNombre].items.push({
-        codigo: item.Item_Codigo || item.item_codigo || '',
-        descripcion: item.Item_Descripcion || item.item_descripcion || '',
-        puntajeMax: puntajeMaxItem,
-        orden: parseFloat(item.Orden_Item || item.orden_item || 0) || 0
-      });
-      map[estacion].categorias[catNombre].puntajeMaxCategoria += puntajeMaxItem;
-      map[estacion].puntajeMax += puntajeMaxItem;
+
+      const categoriaActual = map[estacion].categorias[catNombre];
+      const claveUnica = tieneLetraPar ? codigoBase : (codigo || descripcion);
+
+      if (!categoriaActual.itemsMap[claveUnica]) {
+        categoriaActual.itemsMap[claveUnica] = {
+          codigo: codigoBase,
+          descripcion: descBase,
+          puntajeMax: 0,
+          puntajeBaseA: 0,
+          esPareadoConLetra: tieneLetraPar,
+          orden: parseFloat(item.Orden_Item || item.orden_item || 0) || 0
+        };
+      }
+
+      const itemExistente = categoriaActual.itemsMap[claveUnica];
+
+      if (tieneLetraPar) {
+        if (letraActual === 'a') {
+          itemExistente.puntajeBaseA = puntajeMaxItem;
+        }
+        itemExistente.puntajeMax += puntajeMaxItem;
+      } else {
+        itemExistente.puntajeMax = puntajeMaxItem;
+      }
     });
- 
+
     Object.values(map).forEach((est) => {
-      est.categorias = Object.values(est.categorias).sort((a, b) => a.orden - b.orden);
-      est.categorias.forEach((cat) => cat.items.sort((a, b) => a.orden - b.orden));
+      let puntajeTotalEstacion = 0;
+      
+      est.categorias = Object.values(est.categorias).map((cat) => {
+        let puntajeMaxCat = 0;
+        const itemsArray = Object.values(cat.itemsMap).sort((a, b) => a.orden - b.orden);
+        
+        itemsArray.forEach((it) => {
+          puntajeMaxCat += it.puntajeMax;
+        });
+
+        puntajeTotalEstacion += puntajeMaxCat;
+        delete cat.itemsMap;
+        
+        return {
+          ...cat,
+          items: itemsArray,
+          puntajeMaxCategoria: puntajeMaxCat
+        };
+      }).sort((a, b) => a.orden - b.orden);
+
+      est.puntajeMax = puntajeTotalEstacion;
     });
- 
+
     return map;
   }, [estacionesConfigRaw]);
  
-const estudiantesMap = useMemo(() => {
-  const map = {};
-  asignacionesRaw.forEach((a) => {
-    const dni = (a.DNI_Estudiante || a.dni || '').toString();
-    const alumno = a.Nombre_Estudiante || a.alumno || 'Sin Nombre';
-    const dia = a.Dia || a.dia || '';
-    const estacion = a.Estacion || a.estacion;
-    
-    // Capturamos datos adicionales si vienen desde Google Sheets (Cohorte, Localidad, etc.)
-    const cohorte = a.Cohorte || a.cohorte || 'Abril de 2026';
-    const localidad = a.Localidad || a.localidad || 'Villa María';
-    
-    if (!dni || !estacion) return;
+  const estudiantesMap = useMemo(() => {
+    const map = {};
+    asignacionesRaw.forEach((a) => {
+      const dni = (a.DNI_Estudiante || a.dni || '').toString();
+      const alumno = a.Nombre_Estudiante || a.alumno || 'Sin Nombre';
+      const dia = a.Dia || a.dia || '';
+      const estacion = a.Estacion || a.estacion;
+      
+      const cohorte = a.Cohorte || a.cohorte || 'Abril de 2026';
+      const localidad = a.Localidad || a.localidad || 'Villa María';
+      
+      if (!dni || !estacion) return;
 
-    if (!map[dni]) {
-      map[dni] = { 
-        dni, 
-        alumno, 
-        dia, 
-        cohorte, 
-        localidad, 
-        estaciones: [] 
-      };
-    }
-    if (!map[dni].estaciones.includes(estacion)) {
-      map[dni].estaciones.push(estacion);
-    }
-  });
-  return map;
-}, [asignacionesRaw]);
+      if (!map[dni]) {
+        map[dni] = { 
+          dni, 
+          alumno, 
+          dia, 
+          cohorte, 
+          localidad, 
+          estaciones: [] 
+        };
+      }
+      if (!map[dni].estaciones.includes(estacion)) {
+        map[dni].estaciones.push(estacion);
+      }
+    });
+    return map;
+  }, [asignacionesRaw]);
  
   const listaEstudiantes = useMemo(
     () => Object.values(estudiantesMap).sort((a, b) => a.alumno.localeCompare(b.alumno)),
@@ -825,26 +861,26 @@ const estudiantesMap = useMemo(() => {
     });
   }, [listaEstacionesTotales, resultadosMap]);
  
-const pfoMap = useMemo(() => {
-  const map = {};
-  pfoDatos.forEach((item) => {
-    const dni = (item.DNI_Estudiante || item.dni || '').toString();
-    if (!dni) return;
-    if (!map[dni]) map[dni] = [];
-    map[dni].push({
-      rotacion: item.Rotacion || item.rotacion || 'Sin rotación',
-      hospital: item.Hospital || item.hospital || '',
-      calificacion: item.Calificacion || item.calificacion || '',
-      desde: item.Desde || item.desde || '',
-      hasta: item.Hasta || item.hasta || '',
-      tutor: item.Tutor || item.tutor || '',
-      observaciones: item.Observaciones || item.observaciones || ''
+  const pfoMap = useMemo(() => {
+    const map = {};
+    pfoDatos.forEach((item) => {
+      const dni = (item.DNI_Estudiante || item.dni || '').toString();
+      if (!dni) return;
+      if (!map[dni]) map[dni] = [];
+      map[dni].push({
+        rotacion: item.Rotacion || item.rotacion || 'Sin rotación',
+        hospital: item.Hospital || item.hospital || '',
+        calificacion: item.Calificacion || item.calificacion || '',
+        desde: item.Desde || item.desde || '',
+        hasta: item.Hasta || item.hasta || '',
+        tutor: item.Tutor || item.tutor || '',
+        observaciones: item.Observaciones || item.observaciones || ''
+      });
     });
-  });
-  return map;
-}, [pfoDatos]);
+    return map;
+  }, [pfoDatos]);
 
-  const estudiantesFiltrados = listaEstudiantes.filter((est) => {
+const estudiantesFiltrados = listaEstudiantes.filter((est) => {
     const matchS =
       !searchEcoe ||
       normalizarTexto(est.alumno).includes(normalizarTexto(searchEcoe)) ||
@@ -853,8 +889,21 @@ const pfoMap = useMemo(() => {
     return matchS && matchDia;
   });
  
-  const columnasEstaciones = filtroEstacionEcoe === 'todas' ? listaEstacionesTotales : [filtroEstacionEcoe];
- 
+  // Reemplazas esta parte para que las columnas filtren automáticamente las estaciones vacías del día:
+  const columnasEstaciones = useMemo(() => {
+    if (filtroEstacionEcoe !== 'todas') {
+      return [filtroEstacionEcoe];
+    }
+
+    const estacionesActivas = new Set();
+    estudiantesFiltrados.forEach((est) => {
+      if (est.estaciones && Array.isArray(est.estaciones)) {
+        est.estaciones.forEach((estacion) => estacionesActivas.add(estacion));
+      }
+    });
+
+    return listaEstacionesTotales.filter((estacion) => estacionesActivas.has(estacion));
+  }, [filtroEstacionEcoe, estudiantesFiltrados, listaEstacionesTotales]);
   const obtenerEstadoCelda = (resultado, asignada) => {
     if (!asignada) {
       return { color: 'bg-slate-50 text-slate-300 border border-slate-100', label: '—', notaLabel: '' };
@@ -930,13 +979,27 @@ const pfoMap = useMemo(() => {
   const puntajeEstacion = (estacion, itemsPuntaje) => {
     const config = estacionesConfigMap[estacion];
     if (!config) return { puntaje: 0, puntajeMax: 0, porcentaje: 0, notaEscala: 2 };
+    
     let puntaje = 0;
+
     config.categorias.forEach((cat) => {
       cat.items.forEach((item) => {
-        const nota = itemsPuntaje[item.codigo] ?? 0;
-        puntaje += (nota / NOTA_MAXIMA_ITEM) * item.puntajeMax;
+        const seleccion = itemsPuntaje[item.codigo] ?? 0;
+        
+        if (item.esPareadoConLetra) {
+          if (seleccion === 1) {
+            puntaje += item.puntajeBaseA || 0;
+          } else if (seleccion === 2) {
+            puntaje += item.puntajeMax || 0;
+          }
+        } else {
+          if (seleccion === 1) {
+            puntaje += item.puntajeMax || 0;
+          }
+        }
       });
     });
+
     const puntajeMax = config.puntajeMax || 100;
     puntaje = Math.round(puntaje * 10) / 10;
     const porcentaje = puntajeMax > 0 ? Math.round((puntaje / puntajeMax) * 100) : 0;
@@ -945,11 +1008,17 @@ const pfoMap = useMemo(() => {
   };
  
   const puntajeCategoria = (cat, itemsPuntaje) => {
-    const puntaje = cat.items.reduce(
-      (acc, item) => acc + ((itemsPuntaje[item.codigo] ?? 0) / NOTA_MAXIMA_ITEM) * item.puntajeMax,
-      0
-    );
-    return Math.round(puntaje * 10) / 10;
+    let puntajeCat = 0;
+    cat.items.forEach((item) => {
+      const seleccion = itemsPuntaje[item.codigo] ?? 0;
+      if (item.esPareadoConLetra) {
+        if (seleccion === 1) puntajeCat += item.puntajeBaseA || 0;
+        else if (seleccion === 2) puntajeCat += item.puntajeMax || 0;
+      } else {
+        if (seleccion === 1) puntajeCat += item.puntajeMax || 0;
+      }
+    });
+    return Math.round(puntajeCat * 10) / 10;
   };
  
   const setNotaItem = (estacion, codigoItem, nota) => {
@@ -1071,41 +1140,38 @@ const pfoMap = useMemo(() => {
   };
  
   const descargarPDFEstacionActual = () => {
-  if (!estudianteSeleccionado || !estacionSeleccionada) {
-    alert('Seleccioná una estación antes de descargar el PDF.');
-    return;
-  }
+    if (!estudianteSeleccionado || !estacionSeleccionada) {
+      alert('Seleccioná una estación antes de descargar el PDF.');
+      return;
+    }
 
-  const tituloOriginal = document.title;
+    const tituloOriginal = document.title;
+    const nombreArchivo = `ECOE_${estacionSeleccionada.replace(/\s+/g, '_')}_${estudianteSeleccionado.alumno.replace(/\s+/g, '_')}`;
 
-  const nombreArchivo =
-    `ECOE_${estacionSeleccionada.replace(/\s+/g, '_')}_${estudianteSeleccionado.alumno.replace(/\s+/g, '_')}`;
+    const modalContenedor = document.querySelector('.contenedor-modal-ecoe');
+    const modalContent = document.getElementById('modal-evaluacion-contenido');
 
-  const modalContenedor = document.querySelector('.contenedor-modal-ecoe');
-  const modalContent = document.getElementById('modal-evaluacion-contenido');
+    if (!modalContenedor || !modalContent) {
+      alert('No se encontró el contenido de la evaluación para generar el PDF.');
+      return;
+    }
 
-  if (!modalContenedor || !modalContent) {
-    alert('No se encontró el contenido de la evaluación para generar el PDF.');
-    return;
-  }
+    document.title = nombreArchivo;
+    modalContenedor.classList.add('modo-impresion');
+    modalContent.classList.add('modo-impresion');
 
-  document.title = nombreArchivo;
-
-  modalContenedor.classList.add('modo-impresion');
-  modalContent.classList.add('modo-impresion');
-
-  requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      window.print();
+      requestAnimationFrame(() => {
+        window.print();
 
-      setTimeout(() => {
-        modalContenedor.classList.remove('modo-impresion');
-        modalContent.classList.remove('modo-impresion');
-        document.title = tituloOriginal;
-      }, 500);
+        setTimeout(() => {
+          modalContenedor.classList.remove('modo-impresion');
+          modalContent.classList.remove('modo-impresion');
+          document.title = tituloOriginal;
+        }, 500);
+      });
     });
-  });
-};
+  };
  
   return (
     <div className="ecoe-root ecoe-container-full space-y-6 py-6">
@@ -1194,7 +1260,6 @@ const pfoMap = useMemo(() => {
           </div>
 
           <div id="contenedor-analisis-impresion" className="space-y-4">
-            {/* Cabecera visible dentro del documento impreso/PDF */}
             <div className="hidden print:block bg-slate-100 p-4 rounded-xl border border-slate-300 mb-4">
               <h1 className="text-sm font-bold text-slate-900">
                 Reporte de Análisis ECOE — {dniFiltroAnalisis ? (listaEstudiantes?.find(e => e.dni === dniFiltroAnalisis)?.alumno || dniFiltroAnalisis) : 'Vista Global (Todos los alumnos)'}
@@ -1483,7 +1548,15 @@ const pfoMap = useMemo(() => {
                                 <div className="space-y-2">
                                   {cat.items.map((item, itemIdx) => {
                                     const nota = detalle.itemsPuntaje[item.codigo] ?? 0;
-                                    const puntosItem = Math.round(((nota / NOTA_MAXIMA_ITEM) * item.puntajeMax) * 10) / 10;
+                                    let puntosItem = 0;
+                                    if (item.esPareadoConLetra) {
+                                      if (nota === 1) puntosItem = item.puntajeBaseA || 0;
+                                      else if (nota === 2) puntosItem = item.puntajeMax || 0;
+                                    } else {
+                                      if (nota === 1) puntosItem = item.puntajeMax || 0;
+                                    }
+                                    puntosItem = Math.round(puntosItem * 10) / 10;
+
                                     return (
                                       <div key={itemIdx} className="bg-slate-50 rounded-lg px-3 py-2 space-y-1.5">
                                         <div className="flex justify-between items-start gap-2">
@@ -1493,24 +1566,51 @@ const pfoMap = useMemo(() => {
                                           </span>
                                           <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{puntosItem}/{item.puntajeMax} pts</span>
                                         </div>
-                                        <div className="flex gap-1 no-imprimir">
-                                          {Array.from({ length: NOTA_MAXIMA_ITEM + 1 }, (_, n) => n).map((n) => (
-                                            <button
-                                              key={n}
-                                              type="button"
-                                              onClick={() => setNotaItem(estacion, item.codigo, n)}
-                                              className={`flex-1 rounded-md py-1.5 text-[11px] font-bold border transition-colors ${
-                                                nota === n
-                                                  ? 'bg-blue-600 border-blue-600 text-white'
-                                                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                                              }`}
-                                            >
-                                              {n}
-                                            </button>
-                                          ))}
-                                        </div>
+<div className="flex gap-1 no-imprimir">
+  {Array.from({ length: (item.esPareadoConLetra ? 2 : 1) + 1 }, (_, n) => n).map((n) => {
+    // Definir la etiqueta visual según el valor numérico (n)
+    let iconoLabel = n;
+    let colorActivo = "bg-blue-600 border-blue-600 text-white";
+    
+    // Si hay 2 opciones (0 y 1)
+    if (item.esPareadoConLetra) {
+      if (n === 0) {
+        iconoLabel = "❌";
+        colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
+      } else if (n === 1) {
+        iconoLabel = "➖";
+        colorActivo = nota === n ? "bg-amber-500 border-amber-500 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-amber-50";
+      } else if (n === 2) {
+        iconoLabel = "✅";
+        colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
+      }
+    } else {
+      // Si es un ítem normal de 2 opciones (0 y 1)
+      if (n === 0) {
+        iconoLabel = "❌";
+        colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
+      } else if (n === 1) {
+        iconoLabel = "✅";
+        colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
+      }
+    }
+
+    return (
+      <button
+        key={n}
+        type="button"
+        onClick={() => setNotaItem(estacion, item.codigo, n)}
+        className={`flex-1 rounded-md py-1.5 text-sm font-bold border transition-all ${colorActivo} ${
+          nota === n ? 'ring-2 ring-offset-1 ring-slate-400' : 'text-slate-500'
+        }`}
+      >
+        {iconoLabel}
+      </button>
+    );
+  })}
+</div>
                                         <div className="hidden modo-impresion text-[11px] font-bold text-slate-700">
-                                          Calificación otorgada: {nota} / {NOTA_MAXIMA_ITEM}
+                                          Calificación otorgada: {nota} / {item.esPareadoConLetra ? 2 : 1}
                                         </div>
                                       </div>
                                     );
