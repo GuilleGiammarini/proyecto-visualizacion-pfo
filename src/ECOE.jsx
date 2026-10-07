@@ -6,20 +6,20 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
   LineChart, Line
 } from 'recharts';
- 
+
 const API_URL = "https://script.google.com/macros/s/AKfycby-qfURF_V4SjrHJIbr7_O-FVIm-QxUJf5nSwg3s5Lyx5as0o2jsEVQVfCSU751OprO-A/exec";
- 
+
 const UMBRAL_APROBACION_ESTACION = 60;
 const PORCENTAJE_MIN_ESTACIONES_APROBADAS = 0.70;
 const PROMEDIO_MIN_EXAMEN = 60;
 const ESCALA_ITEM_DEFAULT = 1;
 const NOTA_MAXIMA_ITEM = 1;
- 
+
 const MARCA = {
   navy: '#1c3f66',
   teal: '#5fa8ac'
 };
- 
+
 const BANDAS = [
   { min: 90, bg: 'bg-emerald-700', text: 'text-white', nombre: 'Excelente' },
   { min: 80, bg: 'bg-emerald-500', text: 'text-white', nombre: 'Muy bueno' },
@@ -27,10 +27,10 @@ const BANDAS = [
   { min: 60, bg: 'bg-amber-400', text: 'text-slate-900', nombre: 'Aprobado justo' },
   { min: 0, bg: 'bg-rose-500', text: 'text-white', nombre: 'Desaprobado' }
 ];
- 
+
 const obtenerBanda = (porcentaje) => BANDAS.find((b) => porcentaje >= b.min) || BANDAS[BANDAS.length - 1];
 const colorBarra = (porcentaje) => (porcentaje >= UMBRAL_APROBACION_ESTACION ? '#10b981' : '#f43f5e');
- 
+
 const obtenerNotaEscala = (porcentaje) => {
   const p = Math.round(porcentaje);
   if (p >= 96) return 10;
@@ -42,7 +42,7 @@ const obtenerNotaEscala = (porcentaje) => {
   if (p >= 60) return 4;
   return 2;
 };
- 
+
 const normalizarTexto = (texto) => {
   if (!texto) return "";
   return texto
@@ -52,21 +52,21 @@ const normalizarTexto = (texto) => {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 };
- 
+
 const normalizarNota = (valor) => {
   if (typeof valor === 'boolean') return valor ? NOTA_MAXIMA_ITEM : 0;
   const num = parseFloat(valor);
   if (isNaN(num)) return 0;
   return Math.min(2, Math.max(0, num)); // Permite hasta 2 en ítems especiales pareados
 };
- 
+
 const formatearFecha = (iso) => {
   if (!iso) return 'Sin fecha';
   const d = new Date(iso);
   if (isNaN(d.getTime())) return 'Sin fecha';
   return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' });
 };
- 
+
 const MembretePDF = () => (
   <div className="membrete-impresion">
     <div className="flex items-center gap-4">
@@ -86,14 +86,19 @@ const MembretePDF = () => (
     </div>
   </div>
 );
- 
-function EncabezadoECOE({ vista, setVista, totalEstudiantes, totalEstaciones }) {
+
+function EncabezadoECOE({ vista, setVista, totalEstudiantes, totalEstaciones, esAdmin }) {
+  // El evaluador (no admin) solo ve el mapa de calor
   const tabs = [
     { id: 'mapa', label: 'Mapa de calor' },
-    { id: 'analisis', label: 'Análisis de resultados' },
-    { id: 'portafolio', label: 'Portafolio de estudiante' }
+    ...(esAdmin
+      ? [
+          { id: 'analisis', label: 'Análisis de resultados' },
+          { id: 'portafolio', label: 'Portafolio de estudiante' }
+        ]
+      : [])
   ];
- 
+
   return (
     <div className="ecoe-header-gradient rounded-2xl overflow-hidden shadow-sm border border-slate-200 no-imprimir">
       <div className="px-6 pt-6 pb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
@@ -111,7 +116,7 @@ function EncabezadoECOE({ vista, setVista, totalEstudiantes, totalEstaciones }) 
           </p>
         </div>
       </div>
- 
+
       <div className="bg-black/15 px-4">
         <div className="flex gap-1">
           {tabs.map((t) => (
@@ -132,7 +137,7 @@ function EncabezadoECOE({ vista, setVista, totalEstudiantes, totalEstaciones }) 
     </div>
   );
 }
- 
+
 function TarjetaMetrica({ etiqueta, valor, detalle, acento }) {
   return (
     <div className="bg-white rounded-xl p-4 border border-slate-200">
@@ -142,7 +147,7 @@ function TarjetaMetrica({ etiqueta, valor, detalle, acento }) {
     </div>
   );
 }
- 
+
 function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, listaEstudiantes, diaFiltro }) {
   const datosCalculados = useMemo(() => {
     /*
@@ -188,8 +193,6 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
     );
 
     if (dniFiltro) {
-      const estudianteObj = estudiantesFiltrados[0];
-
       return datosFiltrados.map((d) => {
         const res = resultadosMap[`${dniFiltro}__${d.estacion}`];
 
@@ -427,18 +430,18 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
       .filter(Boolean)
       .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
   }, [estudiante, resultadosMap]);
- 
+
   const datosEvolucion = useMemo(
     () => lineaDeTiempo.map((r, i) => ({ nombre: r.estacion, orden: i + 1, porcentaje: r.porcentaje })),
     [lineaDeTiempo]
   );
- 
+
   const resumen = estudiante ? calcularResumenEstudiante(estudiante) : null;
- 
+
   const avancePfo = useMemo(() => {
     if (!historialPfoEstudiante.length) return { porcentaje: 75, etapa: 'Gineco', institucion: 'Sin institución asignada (Gineco)' };
     const completadas = historialPfoEstudiante.length;
-    const porcentaje = Math.min(100, Math.round((completadas / 7) * 100)); 
+    const porcentaje = Math.min(100, Math.round((completadas / 7) * 100));
     const ultimaRotacion = historialPfoEstudiante[historialPfoEstudiante.length - 1];
     return {
       porcentaje,
@@ -446,7 +449,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
       institucion: ultimaRotacion.hospital || 'Sin institución asignada (Gineco)'
     };
   }, [historialPfoEstudiante]);
- 
+
   const descargarPortafolioPDF = () => {
     const tituloOriginal = document.title;
     if (estudiante) {
@@ -454,7 +457,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
     }
     const el = document.getElementById('contenedor-portafolio-impresion');
     if (el) el.classList.add('modo-impresion');
- 
+
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         window.print();
@@ -465,7 +468,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
       });
     });
   };
- 
+
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl p-5 border border-slate-200 no-imprimir flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -486,7 +489,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
             ))}
           </select>
         </div>
- 
+
         {estudiante && (
           <button
             onClick={descargarPortafolioPDF}
@@ -496,7 +499,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
           </button>
         )}
       </div>
- 
+
       {!estudiante ? (
         <div className="bg-white rounded-xl p-12 text-center border border-slate-200">
           <p className="text-xs font-semibold text-slate-500">Elegí un estudiante para ver su portafolio.</p>
@@ -504,7 +507,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
       ) : (
         <div id="contenedor-portafolio-impresion" className="space-y-6 p-1">
           <MembretePDF />
- 
+
           <div className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <div className="flex items-center gap-2">
@@ -517,19 +520,19 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
                 DNI: <span className="font-semibold text-slate-700">{estudiante.dni}</span> · Localidad: <span className="font-semibold text-slate-700">{estudiante.localidad || 'Villa María'}</span>
               </p>
             </div>
-            
+
             <div className="bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 text-right w-full md:w-auto">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trayecto PFO</p>
               <p className="text-xs font-bold text-slate-800 mt-0.5">Etapa Actual: {avancePfo.etapa}</p>
               <p className="text-[10px] text-slate-500">Inst: {avancePfo.institucion}</p>
             </div>
           </div>
- 
+
           <div className="hidden modo-impresion mb-4 pb-3 border-b border-slate-300">
             <h2 className="text-xl font-bold text-slate-900">Portafolio ECOE - {estudiante.alumno}</h2>
             <p className="text-xs text-slate-600">DNI: {estudiante.dni} · Localidad: {estudiante.localidad || 'Villa María'} · Cohorte: {estudiante.cohorte || 'Abril 2026'}</p>
           </div>
- 
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <TarjetaMetrica etiqueta="Promedio histórico" valor={`${resumen.promedio}%`} />
             <TarjetaMetrica etiqueta="Estaciones evaluadas" valor={`${resumen.evaluadas}/${resumen.totalAsignadas}`} />
@@ -551,7 +554,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-4">
               Trayecto PFO - Cronograma de Módulos
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
                 <div>
@@ -633,7 +636,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
               </div>
             </div>
           </div>
- 
+
           <div className="bg-white rounded-xl p-5 border border-slate-200">
             <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Evolución de rendimiento (%)</h3>
             {datosEvolucion.length === 0 ? (
@@ -655,30 +658,57 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
     </div>
   );
 }
- 
-export default function ECOE() {
+
+export default function ECOE({ user }) {
+  // ---------------------------------------------------------------
+  // USUARIO / PERMISOS
+  // Toma el usuario por prop; si no llega, intenta leerlo del storage.
+  // Campos esperados: rol, estacion, nombre.
+  // ---------------------------------------------------------------
+  const { esAdmin, userEstacion, nombreUsuario } = useMemo(() => {
+    let u = user;
+    if (!u) {
+      try {
+        const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
+        u = raw ? JSON.parse(raw) : null;
+      } catch {
+        u = null;
+      }
+    }
+    const rol = normalizarTexto(u?.rol || u?.role || u?.Rol || '');
+    const admin = rol === 'admin' || rol === 'administrador' || u?.isAdmin === true;
+    return {
+      esAdmin: admin,
+      userEstacion: admin ? '' : (u?.estacion || u?.Estacion || ''),
+      nombreUsuario: u?.nombre || u?.name || u?.Nombre || ''
+    };
+  }, [user]);
+
+  const puedeVerEstacion = (estacion) =>
+    esAdmin || (userEstacion && normalizarTexto(estacion) === normalizarTexto(userEstacion));
+
   const [vista, setVista] = useState('mapa');
   const [pfoDatos, setPfoDatos] = useState([]);
- 
+
   const [ecoeDatos, setEcoeDatos] = useState([]);
   const [estacionesConfigRaw, setEstacionesConfigRaw] = useState([]);
   const [asignacionesRaw, setAsignacionesRaw] = useState([]);
   const [loadingEcoe, setLoadingEcoe] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
- 
+
   const [searchEcoe, setSearchEcoe] = useState('');
   const [filtroEstacionEcoe, setFiltroEstacionEcoe] = useState('todas');
   const [filtroDiaEcoe, setFiltroDiaEcoe] = useState('todos');
- 
+
   const [estudianteSeleccionado, setEstudianteSeleccionado] = useState(null);
   const [estacionSeleccionada, setEstacionSeleccionada] = useState(null);
   const [evaluadorActual, setEvaluadorActual] = useState('');
   const [guardando, setGuardando] = useState(false);
- 
+
   const [dniPortafolio, setDniPortafolio] = useState('');
   const [dniFiltroAnalisis, setDniFiltroAnalisis] = useState('');
   const [diaFiltroAnalisis, setDiaFiltroAnalisis] = useState('');
- 
+
   const [colaPendientes, setColaPendientes] = useState(() => {
     try {
       const guardado = localStorage.getItem('ecoe_cola_offline');
@@ -689,7 +719,7 @@ export default function ECOE() {
   });
   const [sincronizando, setSincronizando] = useState(false);
   const [onlineStatus, setOnlineStatus] = useState(navigator.onLine);
- 
+
   useEffect(() => {
     const handleOnline = () => setOnlineStatus(true);
     const handleOffline = () => setOnlineStatus(false);
@@ -700,7 +730,7 @@ export default function ECOE() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
- 
+
   useEffect(() => {
     try {
       localStorage.setItem('ecoe_cola_offline', JSON.stringify(colaPendientes));
@@ -708,20 +738,20 @@ export default function ECOE() {
       console.error("Error guardando en localStorage:", e);
     }
   }, [colaPendientes]);
- 
+
   useEffect(() => {
     if (onlineStatus && colaPendientes.length > 0 && !sincronizando) {
       sincronizarCola();
     }
   }, [onlineStatus, colaPendientes]);
- 
+
   const sincronizarCola = async () => {
     if (colaPendientes.length === 0 || sincronizando) return;
     setSincronizando(true);
- 
+
     const pendientesActuales = [...colaPendientes];
     const noSincronizados = [];
- 
+
     for (const item of pendientesActuales) {
       try {
         await fetch(API_URL, {
@@ -735,12 +765,12 @@ export default function ECOE() {
         noSincronizados.push(item);
       }
     }
- 
+
     setColaPendientes(noSincronizados);
     setSincronizando(false);
     cargarDatos();
   };
- 
+
   const cargarDatos = async () => {
     setLoadingEcoe(true);
     try {
@@ -750,7 +780,7 @@ export default function ECOE() {
         fetch(`${API_URL}?vista=asignaciones`).then((r) => r.json()),
         fetch(`${API_URL}?vista=pfo`).then((r) => r.json()).catch(() => [])
       ]);
-      
+
       setEcoeDatos(Array.isArray(resultados) ? resultados : []);
       setEstacionesConfigRaw(Array.isArray(config) ? config : []);
       setAsignacionesRaw(Array.isArray(asignaciones) ? asignaciones : []);
@@ -762,20 +792,20 @@ export default function ECOE() {
       setLoadingEcoe(false);
     }
   };
- 
+
   useEffect(() => {
     cargarDatos();
   }, []);
- 
+
   const estacionesConfigMap = useMemo(() => {
     const map = {};
-    
+
     estacionesConfigRaw.forEach((item) => {
       const estacion = item.Estacion || item.estacion;
       if (!estacion) return;
       const catNombre = item.Categoria || item.categoria || 'General';
       const puntajeMaxItem = parseFloat(item.Puntaje_Max || item.puntaje_max || 0) || 0;
-      
+
       let descripcion = item.Item_Descripcion || item.item_descripcion || '';
       let codigo = item.Item_Codigo || item.item_codigo || '';
 
@@ -794,7 +824,7 @@ export default function ECOE() {
       if (!map[estacion]) {
         map[estacion] = { nombre: estacion, categorias: {} };
       }
-      
+
       if (!map[estacion].categorias[catNombre]) {
         map[estacion].categorias[catNombre] = {
           nombre: catNombre,
@@ -831,18 +861,18 @@ export default function ECOE() {
 
     Object.values(map).forEach((est) => {
       let puntajeTotalEstacion = 0;
-      
+
       est.categorias = Object.values(est.categorias).map((cat) => {
         let puntajeMaxCat = 0;
         const itemsArray = Object.values(cat.itemsMap).sort((a, b) => a.orden - b.orden);
-        
+
         itemsArray.forEach((it) => {
           puntajeMaxCat += it.puntajeMax;
         });
 
         puntajeTotalEstacion += puntajeMaxCat;
         delete cat.itemsMap;
-        
+
         return {
           ...cat,
           items: itemsArray,
@@ -855,7 +885,7 @@ export default function ECOE() {
 
     return map;
   }, [estacionesConfigRaw]);
- 
+
   const estudiantesMap = useMemo(() => {
     const map = {};
     asignacionesRaw.forEach((a) => {
@@ -863,20 +893,20 @@ export default function ECOE() {
       const alumno = a.Nombre_Estudiante || a.alumno || 'Sin Nombre';
       const dia = a.Dia || a.dia || '';
       const estacion = a.Estacion || a.estacion;
-      
+
       const cohorte = a.Cohorte || a.cohorte || 'Abril de 2026';
       const localidad = a.Localidad || a.localidad || 'Villa María';
-      
+
       if (!dni || !estacion) return;
 
       if (!map[dni]) {
-        map[dni] = { 
-          dni, 
-          alumno, 
-          dia, 
-          cohorte, 
-          localidad, 
-          estaciones: [] 
+        map[dni] = {
+          dni,
+          alumno,
+          dia,
+          cohorte,
+          localidad,
+          estaciones: []
         };
       }
       if (!map[dni].estaciones.includes(estacion)) {
@@ -885,7 +915,7 @@ export default function ECOE() {
     });
     return map;
   }, [asignacionesRaw]);
- 
+
   const listaEstudiantes = useMemo(
     () => Object.values(estudiantesMap).sort((a, b) => a.alumno.localeCompare(b.alumno)),
     [estudiantesMap]
@@ -906,7 +936,7 @@ export default function ECOE() {
       a.localeCompare(b, 'es-AR', { numeric: true })
     );
   }, [listaEstudiantes]);
- 
+
   const listaEstacionesTotales = useMemo(() => {
     const set = new Set();
     asignacionesRaw.forEach((a) => {
@@ -915,19 +945,19 @@ export default function ECOE() {
     });
     return Array.from(set).sort();
   }, [asignacionesRaw]);
- 
+
   const resultadosMap = useMemo(() => {
     const map = {};
     ecoeDatos.forEach((item) => {
       const dni = (item.DNI_Estudiante || item.dni || '').toString();
       const estacion = item.Estacion || item.estacion;
       if (!dni || !estacion) return;
- 
+
       const puntaje = parseFloat(item.Puntaje_Total || item.puntaje || 0) || 0;
       const puntajeMax = parseFloat(item.Puntaje_Max_Estacion || item.puntajeMax || 100) || 100;
       const porcentaje = puntajeMax > 0 ? Math.round((puntaje / puntajeMax) * 100) : 0;
       const notaEscala = obtenerNotaEscala(porcentaje);
- 
+
       let detalle = {};
       try {
         const crudo = item.Detalle_Items || item.detalleItems;
@@ -935,7 +965,7 @@ export default function ECOE() {
       } catch {
         detalle = {};
       }
- 
+
       map[`${dni}__${estacion}`] = {
         dni,
         estacion,
@@ -952,7 +982,7 @@ export default function ECOE() {
     });
     return map;
   }, [ecoeDatos]);
- 
+
   const datosPorEstacion = useMemo(() => {
     return listaEstacionesTotales.map((estacion) => {
       const resultados = Object.values(resultadosMap).filter((r) => r.estacion === estacion);
@@ -963,7 +993,7 @@ export default function ECOE() {
       return { estacion, promedio, evaluados: resultados.length };
     });
   }, [listaEstacionesTotales, resultadosMap]);
- 
+
   const pfoMap = useMemo(() => {
     const map = {};
     pfoDatos.forEach((item) => {
@@ -983,30 +1013,41 @@ export default function ECOE() {
     return map;
   }, [pfoDatos]);
 
-const estudiantesFiltrados = listaEstudiantes.filter((est) => {
+  // ---------------------------------------------------------------
+  // ESTUDIANTES FILTRADOS
+  // El evaluador (no admin) solo ve alumnos que tengan su estación.
+  // ---------------------------------------------------------------
+  const estudiantesFiltrados = listaEstudiantes.filter((est) => {
     const matchS =
       !searchEcoe ||
       normalizarTexto(est.alumno).includes(normalizarTexto(searchEcoe)) ||
       est.dni.toString().includes(searchEcoe);
     const matchDia = filtroDiaEcoe === 'todos' || normalizarTexto(est.dia) === normalizarTexto(filtroDiaEcoe);
-    return matchS && matchDia;
+    const matchEstacionUsuario = esAdmin || est.estaciones.some((e) => puedeVerEstacion(e));
+    return matchS && matchDia && matchEstacionUsuario;
   });
- 
-  // Reemplazas esta parte para que las columnas filtren automáticamente las estaciones vacías del día:
+
+  // ---------------------------------------------------------------
+  // COLUMNAS DE ESTACIONES (un solo bloque, ya sin duplicados)
+  // ---------------------------------------------------------------
   const columnasEstaciones = useMemo(() => {
-    if (filtroEstacionEcoe !== 'todas') {
-      return [filtroEstacionEcoe];
+    // Evaluador (no admin): solo su estación
+    if (!esAdmin) {
+      if (!userEstacion) return [];
+      return listaEstacionesTotales.filter(
+        (estacion) => normalizarTexto(estacion) === normalizarTexto(userEstacion)
+      );
     }
+
+    if (filtroEstacionEcoe !== 'todas') return [filtroEstacionEcoe];
 
     const estacionesActivas = new Set();
     estudiantesFiltrados.forEach((est) => {
-      if (est.estaciones && Array.isArray(est.estaciones)) {
-        est.estaciones.forEach((estacion) => estacionesActivas.add(estacion));
-      }
+      (est.estaciones || []).forEach((e) => estacionesActivas.add(e));
     });
+    return listaEstacionesTotales.filter((e) => estacionesActivas.has(e));
+  }, [esAdmin, userEstacion, filtroEstacionEcoe, estudiantesFiltrados, listaEstacionesTotales]);
 
-    return listaEstacionesTotales.filter((estacion) => estacionesActivas.has(estacion));
-  }, [filtroEstacionEcoe, estudiantesFiltrados, listaEstacionesTotales]);
   const obtenerEstadoCelda = (resultado, asignada) => {
     if (!asignada) {
       return { color: 'bg-slate-50 text-slate-300 border border-slate-100', label: '—', notaLabel: '' };
@@ -1021,13 +1062,13 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
       notaLabel: `Nota: ${resultado.notaEscala}`
     };
   };
- 
+
   const calcularResumenEstudiante = (est) => {
     const estacionesAsignadas = est.estaciones || [];
     let evaluadas = 0;
     let aprobadas = 0;
     let sumaPorcentajes = 0;
- 
+
     estacionesAsignadas.forEach((estacion) => {
       const r = resultadosMap[`${est.dni}__${estacion}`];
       if (r) {
@@ -1036,27 +1077,33 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
         if (r.porcentaje >= UMBRAL_APROBACION_ESTACION) aprobadas += 1;
       }
     });
- 
+
     const totalAsignadas = estacionesAsignadas.length;
     const promedio = evaluadas > 0 ? Math.round(sumaPorcentajes / evaluadas) : 0;
     const minAprobar = Math.ceil(totalAsignadas * PORCENTAJE_MIN_ESTACIONES_APROBADAS);
     const completo = evaluadas === totalAsignadas && totalAsignadas > 0;
- 
+
     let resultadoFinal = 'Incompleto';
     if (completo) {
       resultadoFinal = aprobadas >= minAprobar && promedio >= PROMEDIO_MIN_EXAMEN ? 'Aprobado' : 'Desaprobado';
     }
- 
+
     return { evaluadas, aprobadas, totalAsignadas, promedio, minAprobar, resultadoFinal };
   };
- 
+
+  // ---------------------------------------------------------------
+  // ABRIR ESTUDIANTE: el evaluador solo puede abrir su estación
+  // ---------------------------------------------------------------
   const abrirEstudiante = (est, estacionInicial) => {
+    const estacionesVisibles = est.estaciones.filter(puedeVerEstacion);
+    if (estacionesVisibles.length === 0) return;
+
     const estacionesDetalle = {};
-    est.estaciones.forEach((estacion) => {
+    estacionesVisibles.forEach((estacion) => {
       const config = estacionesConfigMap[estacion];
       const resultado = resultadosMap[`${est.dni}__${estacion}`];
       const itemsPuntaje = {};
- 
+
       if (config) {
         config.categorias.forEach((cat) => {
           cat.items.forEach((item) => {
@@ -1064,31 +1111,34 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
           });
         });
       }
- 
+
       estacionesDetalle[estacion] = {
         itemsPuntaje,
         observaciones: resultado?.observaciones || ''
       };
     });
- 
-    const estacionMeta = estacionInicial || est.estaciones[0] || null;
+
+    const estacionMeta =
+      estacionInicial && estacionesVisibles.includes(estacionInicial)
+        ? estacionInicial
+        : estacionesVisibles[0];
     const resultadoExistente = resultadosMap[`${est.dni}__${estacionMeta}`];
- 
-    setEvaluadorActual(resultadoExistente?.evaluador || '');
+
+    setEvaluadorActual(resultadoExistente?.evaluador || nombreUsuario || '');
     setEstacionSeleccionada(estacionMeta);
-    setEstudianteSeleccionado({ ...est, estacionesDetalle });
+    setEstudianteSeleccionado({ ...est, estaciones: estacionesVisibles, estacionesDetalle });
   };
- 
+
   const puntajeEstacion = (estacion, itemsPuntaje) => {
     const config = estacionesConfigMap[estacion];
     if (!config) return { puntaje: 0, puntajeMax: 0, porcentaje: 0, notaEscala: 2 };
-    
+
     let puntaje = 0;
 
     config.categorias.forEach((cat) => {
       cat.items.forEach((item) => {
         const seleccion = itemsPuntaje[item.codigo] ?? 0;
-        
+
         if (item.esPareadoConLetra) {
           if (seleccion === 1) {
             puntaje += item.puntajeBaseA || 0;
@@ -1109,7 +1159,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
     const notaEscala = obtenerNotaEscala(porcentaje);
     return { puntaje, puntajeMax, porcentaje, notaEscala };
   };
- 
+
   const puntajeCategoria = (cat, itemsPuntaje) => {
     let puntajeCat = 0;
     cat.items.forEach((item) => {
@@ -1123,7 +1173,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
     });
     return Math.round(puntajeCat * 10) / 10;
   };
- 
+
   const setNotaItem = (estacion, codigoItem, nota) => {
     setEstudianteSeleccionado((prev) => {
       if (!prev) return prev;
@@ -1138,7 +1188,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
       };
     });
   };
- 
+
   const setObservacionEstacion = (estacion, texto) => {
     setEstudianteSeleccionado((prev) => {
       if (!prev) return prev;
@@ -1151,31 +1201,31 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
       };
     });
   };
- 
+
   const guardarFichaEstudiante = async () => {
     if (!estudianteSeleccionado || !estacionSeleccionada) return;
- 
+
     if (!evaluadorActual.trim()) {
       alert('Ingresá el nombre del evaluador/a antes de guardar.');
       return;
     }
- 
+
     setGuardando(true);
     const { dni, alumno, dia, estacionesDetalle } = estudianteSeleccionado;
     const estacion = estacionSeleccionada;
     const detalle = estacionesDetalle[estacion];
- 
+
     if (!detalle) {
       alert('No se encontró el detalle para esta estación.');
       setGuardando(false);
       return;
     }
- 
+
     const { puntaje, puntajeMax, porcentaje } = puntajeEstacion(estacion, detalle.itemsPuntaje);
     const estado = porcentaje >= UMBRAL_APROBACION_ESTACION ? 'Aprobado' : 'Desaprobado';
- 
+
     const idEvaluacion = `${dni}_${estacion}`;
- 
+
     const nuevoRegistro = {
       accion: 'guardar_ecoe',
       idEvaluacion: idEvaluacion,
@@ -1192,13 +1242,13 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
       observaciones: detalle.observaciones || '',
       timestamp: new Date().toISOString()
     };
- 
+
     setEcoeDatos((prev) => {
       const index = prev.findIndex(
         (p) => String(p.ID_Evaluacion || p.idEvaluacion) === String(idEvaluacion) ||
                (String(p.DNI_Estudiante || p.dni) === String(dni) && String(p.Estacion || p.estacion) === String(estacion))
       );
- 
+
       const filaActualizada = {
         ID_Evaluacion: idEvaluacion,
         DNI_Estudiante: dni,
@@ -1213,7 +1263,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
         Observaciones: detalle.observaciones || '',
         Timestamp: nuevoRegistro.timestamp
       };
- 
+
       if (index >= 0) {
         const copia = [...prev];
         copia[index] = { ...copia[index], ...filaActualizada };
@@ -1221,9 +1271,9 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
       }
       return [...prev, filaActualizada];
     });
- 
+
     setColaPendientes((prev) => [...prev, nuevoRegistro]);
- 
+
     if (navigator.onLine) {
       try {
         await fetch(API_URL, {
@@ -1236,12 +1286,12 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
         console.log('Guardado localmente por fallo de red:', err);
       }
     }
- 
+
     setGuardando(false);
     alert('¡Estación guardada con éxito!');
     setEstudianteSeleccionado(null);
   };
- 
+
   const descargarPDFEstacionActual = () => {
     if (!estudianteSeleccionado || !estacionSeleccionada) {
       alert('Seleccioná una estación antes de descargar el PDF.');
@@ -1275,7 +1325,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
       });
     });
   };
- 
+
   return (
     <div className="ecoe-root ecoe-container-full space-y-6 py-6">
       <EncabezadoECOE
@@ -1283,10 +1333,14 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
         setVista={setVista}
         totalEstudiantes={listaEstudiantes.length}
         totalEstaciones={listaEstacionesTotales.length}
+        esAdmin={esAdmin}
       />
- 
+
       <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 no-imprimir">
-        <p className="text-xs text-slate-500">Gestión de evaluaciones clínicas estructuradas por estación.</p>
+        <p className="text-xs text-slate-500">
+          Gestión de evaluaciones clínicas estructuradas por estación.
+          {!esAdmin && userEstacion ? ` Estación asignada: ${userEstacion}.` : ''}
+        </p>
         <div className="flex items-center gap-3">
           {onlineStatus ? (
             <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
@@ -1304,19 +1358,25 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
           )}
         </div>
       </div>
- 
+
       {errorCarga && (
         <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl p-4 no-imprimir">
           {errorCarga}
         </div>
       )}
- 
+
+      {!esAdmin && !userEstacion && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-xl p-4 no-imprimir">
+          Tu usuario no tiene una estación asignada. Contactá a un administrador.
+        </div>
+      )}
+
       {loadingEcoe ? (
         <div className="bg-white rounded-xl p-12 text-center border border-slate-200 no-imprimir">
           <div className="animate-spin w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
           <p className="text-xs font-semibold text-slate-500">Cargando datos de ECOE...</p>
         </div>
-      ) : vista === 'analisis' ? (
+      ) : vista === 'analisis' && esAdmin ? (
         <div className="space-y-6">
           <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4 no-imprimir">
             <div>
@@ -1400,8 +1460,8 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
               </p>
             </div>
 
-            <VistaAnalisisResultados 
-              datosPorEstacion={datosPorEstacion} 
+            <VistaAnalisisResultados
+              datosPorEstacion={datosPorEstacion}
               resultadosMap={resultadosMap}
               dniFiltro={dniFiltroAnalisis}
               diaFiltro={diaFiltroAnalisis}
@@ -1409,7 +1469,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
             />
           </div>
         </div>
-      ) : vista === 'portafolio' ? (
+      ) : vista === 'portafolio' && esAdmin ? (
         <VistaPortafolio
           listaEstudiantes={listaEstudiantes}
           resultadosMap={resultadosMap}
@@ -1433,7 +1493,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
             <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-200 inline-block"></span><span>Asignada, no iniciado</span></div>
             <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-slate-50 border border-slate-200 inline-block"></span><span>No le corresponde esta estación</span></div>
           </div>
- 
+
           <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm space-y-4 no-imprimir">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -1459,22 +1519,24 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                   <option value="sabado">Sábado</option>
                 </select>
               </div>
-              <div>
-                <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Filtrar por Estación</label>
-                <select
-                  value={filtroEstacionEcoe}
-                  onChange={(e) => setFiltroEstacionEcoe(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                >
-                  <option value="todas">Todas las estaciones</option>
-                  {listaEstacionesTotales.map((est) => (
-                    <option key={est} value={est}>{est}</option>
-                  ))}
-                </select>
-              </div>
+              {esAdmin && (
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Filtrar por Estación</label>
+                  <select
+                    value={filtroEstacionEcoe}
+                    onChange={(e) => setFiltroEstacionEcoe(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  >
+                    <option value="todas">Todas las estaciones</option>
+                    {listaEstacionesTotales.map((est) => (
+                      <option key={est} value={est}>{est}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
- 
+
           {estudiantesFiltrados.length === 0 ? (
             <div className="bg-white rounded-xl p-12 text-center border border-slate-200 no-imprimir">
               <p className="text-xs font-semibold text-slate-500">No se encontraron estudiantes con los filtros seleccionados.</p>
@@ -1559,15 +1621,15 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
           )}
         </>
       )}
- 
+
       {estudianteSeleccionado && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 contenedor-modal-ecoe">
           <div
-             id="modal-evaluacion-contenido"
+            id="modal-evaluacion-contenido"
             className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6"
-            >
+          >
             <MembretePDF />
- 
+
             <div className="flex justify-between items-start border-b border-slate-100 pb-4">
               <div>
                 <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">Evaluación Clínica Individual - ECOE</span>
@@ -1581,7 +1643,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                 ✕
               </button>
             </div>
- 
+
             {(() => {
               const resumen = calcularResumenEstudiante(estudianteSeleccionado);
               return (
@@ -1605,7 +1667,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                 </div>
               );
             })()}
- 
+
             <div>
               <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Evaluador/a (Docente a cargo)</label>
               <input
@@ -1616,7 +1678,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                 className="w-full sm:w-96 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>
- 
+
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider no-imprimir">Estación a evaluar</h4>
               <div className="flex flex-wrap gap-2 no-imprimir">
@@ -1647,14 +1709,14 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                   );
                 })}
               </div>
- 
-              {estacionSeleccionada && (() => {
+
+              {estacionSeleccionada && estudianteSeleccionado.estacionesDetalle[estacionSeleccionada] && (() => {
                 const estacion = estacionSeleccionada;
                 const config = estacionesConfigMap[estacion];
                 const detalle = estudianteSeleccionado.estacionesDetalle[estacion];
                 const { puntaje, puntajeMax, porcentaje, notaEscala } = puntajeEstacion(estacion, detalle.itemsPuntaje);
                 const aprobada = porcentaje >= UMBRAL_APROBACION_ESTACION;
- 
+
                 return (
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
@@ -1663,7 +1725,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                         {puntaje}/{puntajeMax} pts · {porcentaje}% — <span className="underline">Nota: {notaEscala}</span>
                       </span>
                     </div>
- 
+
                     <div className="p-4 space-y-4">
                       {!config ? (
                         <p className="text-xs text-slate-400 italic">
@@ -1700,49 +1762,46 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                                           </span>
                                           <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{puntosItem}/{item.puntajeMax} pts</span>
                                         </div>
-<div className="flex gap-1 no-imprimir">
-  {Array.from({ length: (item.esPareadoConLetra ? 2 : 1) + 1 }, (_, n) => n).map((n) => {
-    // Definir la etiqueta visual según el valor numérico (n)
-    let iconoLabel = n;
-    let colorActivo = "bg-blue-600 border-blue-600 text-white";
-    
-    // Si hay 2 opciones (0 y 1)
-    if (item.esPareadoConLetra) {
-      if (n === 0) {
-        iconoLabel = "❌";
-        colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
-      } else if (n === 1) {
-        iconoLabel = "➖";
-        colorActivo = nota === n ? "bg-amber-500 border-amber-500 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-amber-50";
-      } else if (n === 2) {
-        iconoLabel = "✅";
-        colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
-      }
-    } else {
-      // Si es un ítem normal de 2 opciones (0 y 1)
-      if (n === 0) {
-        iconoLabel = "❌";
-        colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
-      } else if (n === 1) {
-        iconoLabel = "✅";
-        colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
-      }
-    }
+                                        <div className="flex gap-1 no-imprimir">
+                                          {Array.from({ length: (item.esPareadoConLetra ? 2 : 1) + 1 }, (_, n) => n).map((n) => {
+                                            let iconoLabel = n;
+                                            let colorActivo = "bg-blue-600 border-blue-600 text-white";
 
-    return (
-      <button
-        key={n}
-        type="button"
-        onClick={() => setNotaItem(estacion, item.codigo, n)}
-        className={`flex-1 rounded-md py-1.5 text-sm font-bold border transition-all ${colorActivo} ${
-          nota === n ? 'ring-2 ring-offset-1 ring-slate-400' : 'text-slate-500'
-        }`}
-      >
-        {iconoLabel}
-      </button>
-    );
-  })}
-</div>
+                                            if (item.esPareadoConLetra) {
+                                              if (n === 0) {
+                                                iconoLabel = "❌";
+                                                colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
+                                              } else if (n === 1) {
+                                                iconoLabel = "➖";
+                                                colorActivo = nota === n ? "bg-amber-500 border-amber-500 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-amber-50";
+                                              } else if (n === 2) {
+                                                iconoLabel = "✅";
+                                                colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
+                                              }
+                                            } else {
+                                              if (n === 0) {
+                                                iconoLabel = "❌";
+                                                colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
+                                              } else if (n === 1) {
+                                                iconoLabel = "✅";
+                                                colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
+                                              }
+                                            }
+
+                                            return (
+                                              <button
+                                                key={n}
+                                                type="button"
+                                                onClick={() => setNotaItem(estacion, item.codigo, n)}
+                                                className={`flex-1 rounded-md py-1.5 text-sm font-bold border transition-all ${colorActivo} ${
+                                                  nota === n ? 'ring-2 ring-offset-1 ring-slate-400' : 'text-slate-500'
+                                                }`}
+                                              >
+                                                {iconoLabel}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
                                         <div className="hidden modo-impresion text-[11px] font-bold text-slate-700">
                                           Calificación otorgada: {nota} / {item.esPareadoConLetra ? 2 : 1}
                                         </div>
@@ -1753,7 +1812,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                               </div>
                             );
                           })}
- 
+
                           <div>
                             <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider block mb-1">Observaciones de la estación</label>
                             <textarea
@@ -1774,7 +1833,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
                 );
               })()}
             </div>
- 
+
             <div className="flex justify-between items-center pt-4 border-t border-slate-100">
               <button
                 onClick={descargarPDFEstacionActual}
@@ -1782,7 +1841,7 @@ const estudiantesFiltrados = listaEstudiantes.filter((est) => {
               >
                 📄 Descargar PDF Estación
               </button>
- 
+
               <div className="flex gap-3 no-imprimir">
                 <button
                   onClick={() => setEstudianteSeleccionado(null)}
