@@ -53,12 +53,111 @@ const normalizarTexto = (texto) => {
     .replace(/[\u0300-\u036f]/g, "");
 };
 
-const normalizarNota = (valor) => {
+const normalizarNota = (valor, maxIndice = 2) => {
   if (typeof valor === 'boolean') return valor ? NOTA_MAXIMA_ITEM : 0;
   const num = parseFloat(valor);
   if (isNaN(num)) return 0;
-  return Math.min(2, Math.max(0, num)); // Permite hasta 2 en ítems especiales pareados
+  // maxIndice = 2 para ítems simples (comportamiento original);
+  // para ítems multiopción se pasa opciones.length - 1.
+  return Math.min(maxIndice, Math.max(0, num));
 };
+
+// ---------------------------------------------------------------
+// ÍTEMS MULTIOPCIÓN POR COLOR
+// Orden canónico de menor a mayor. El VERDE siempre es el puntaje
+// total del ítem. El AZUL (opcional) va entre el amarillo y el verde.
+// En la sheet: fila padre (ej. "3.2") + filas hijas ("3.2 a", "3.2 b"...)
+// cuya descripción es el nombre del color y cuyo Puntaje_Max es el
+// puntaje de esa opción.
+// ---------------------------------------------------------------
+const ORDEN_COLORES = ['rojo', 'amarillo', 'azul', 'verde'];
+
+const ESTILOS_OPCION = {
+  rojo: {
+    nombre: 'ROJO',
+    activo: 'bg-red-600 border-red-600 text-white shadow-sm',
+    inactivo: 'bg-white border-slate-200 text-slate-600 hover:bg-red-50',
+    texto: 'text-red-600'
+  },
+  amarillo: {
+    nombre: 'AMARILLO',
+    activo: 'bg-amber-500 border-amber-500 text-white shadow-sm',
+    inactivo: 'bg-white border-slate-200 text-slate-600 hover:bg-amber-50',
+    texto: 'text-amber-600'
+  },
+  azul: {
+    nombre: 'AZUL',
+    activo: 'bg-blue-600 border-blue-600 text-white shadow-sm',
+    inactivo: 'bg-white border-slate-200 text-slate-600 hover:bg-blue-50',
+    texto: 'text-blue-600'
+  },
+  verde: {
+    nombre: 'VERDE',
+    activo: 'bg-emerald-600 border-emerald-600 text-white shadow-sm',
+    inactivo: 'bg-white border-slate-200 text-slate-600 hover:bg-emerald-50',
+    texto: 'text-emerald-600'
+  }
+};
+
+const detectarColorOpcion = (texto) => {
+  const m = normalizarTexto(texto).match(/^(rojo|amarillo|azul|verde)\b/);
+  return m ? m[1] : null;
+};
+
+// Ordena las opciones por color y fija el puntaje máximo del ítem = VERDE.
+const finalizarItem = (it) => {
+  if (!it.opciones || it.opciones.length === 0) return it;
+  const opciones = [...it.opciones].sort(
+    (a, b) => ORDEN_COLORES.indexOf(a.color) - ORDEN_COLORES.indexOf(b.color)
+  );
+  const verde = opciones.find((o) => o.color === 'verde');
+  const total = verde ? verde.puntaje : Math.max(...opciones.map((o) => o.puntaje));
+  if (it.puntajeMax && it.puntajeMax !== total) {
+    console.warn(
+      `Ítem ${it.codigo}: Puntaje_Max de la fila padre (${it.puntajeMax}) difiere del VERDE (${total}). Se usa el VERDE.`
+    );
+  }
+  return { ...it, opciones, puntajeMax: total };
+};
+
+// Puntos otorgados por un ítem según la selección.
+// - Ítem simple: 0 = no cumple, 1 = cumple (puntajeMax).
+// - Ítem multiopción: la selección es el índice dentro de item.opciones.
+const puntosDeItem = (item, seleccion) => {
+  if (item.opciones && item.opciones.length > 0) {
+    const op = item.opciones[seleccion];
+    return op ? op.puntaje : 0;
+  }
+  return seleccion === 1 ? item.puntajeMax || 0 : 0;
+};
+
+// Muestra la descripción; si trae leyendas "ROJO= ... AMARILLO= ... AZUL= ... VERDE= ..."
+// las separa en líneas con el color correspondiente.
+function DescripcionItem({ descripcion }) {
+  if (!descripcion) return null;
+
+  const partes = descripcion.split(/\s*(ROJO|AMARILLO|AZUL|VERDE)\s*=\s*/i);
+  if (partes.length < 3) return <span>{descripcion}</span>;
+
+  const titulo = partes[0].trim();
+  const leyendas = [];
+  for (let i = 1; i < partes.length; i += 2) {
+    leyendas.push({ clave: normalizarTexto(partes[i]), texto: (partes[i + 1] || '').trim() });
+  }
+
+  return (
+    <div className="flex flex-col gap-1 mt-0.5">
+      {titulo && <span className="font-semibold text-slate-800">{titulo}</span>}
+      <div className="flex flex-col text-[11px] text-slate-600 pl-1 space-y-0.5">
+        {leyendas.map((l) => (
+          <div key={l.clave}>
+            <strong className={ESTILOS_OPCION[l.clave]?.texto}>{ESTILOS_OPCION[l.clave]?.nombre}</strong> = {l.texto}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const formatearFecha = (iso) => {
   if (!iso) return 'Sin fecha';
@@ -800,26 +899,40 @@ export default function ECOE({ user }) {
   const estacionesConfigMap = useMemo(() => {
     const map = {};
 
+    // Para filas hijas (opciones de color) que vengan con Estacion/Categoria
+    // vacías en la sheet, se heredan de la fila anterior.
+    let ultimaEstacion = '';
+    let ultimaCategoria = '';
+    let ultimoOrdenCategoria = 0;
+
     estacionesConfigRaw.forEach((item) => {
-      const estacion = item.Estacion || item.estacion;
-      if (!estacion) return;
-      const catNombre = item.Categoria || item.categoria || 'General';
+      const codigo = (item.Item_Codigo || item.item_codigo || '').toString().trim();
+      const descripcion = (item.Item_Descripcion || item.item_descripcion || '').toString();
       const puntajeMaxItem = parseFloat(item.Puntaje_Max || item.puntaje_max || 0) || 0;
 
-      let descripcion = item.Item_Descripcion || item.item_descripcion || '';
-      let codigo = item.Item_Codigo || item.item_codigo || '';
+      // Fila hija de ítem multiopción: código "3.2 a" + descripción "ROJO"/"AMARILLO"/"AZUL"/"VERDE"
+      const matchCodigoOpcion = codigo.match(/^(.+?)\s*([a-zA-Z])$/);
+      const colorOpcion = matchCodigoOpcion ? detectarColorOpcion(descripcion) : null;
+      const esOpcion = !!colorOpcion;
 
-      const matchLetra = codigo.match(/\s+([a-zA-Z])$/) || descripcion.match(/\s+([a-zA-Z])$/);
-      const tieneLetraPar = !!matchLetra;
-      const letraActual = matchLetra ? matchLetra[1].toLowerCase() : '';
+      let estacion = item.Estacion || item.estacion || '';
+      let catNombre = item.Categoria || item.categoria || '';
+      let ordenCategoria = parseFloat(item.Orden_Categoria || item.orden_categoria || 0) || 0;
 
-      let codigoBase = codigo;
-      let descBase = descripcion;
-
-      if (tieneLetraPar) {
-        codigoBase = codigo.replace(/\s+[a-zA-Z]$/, '').trim();
-        descBase = descripcion.replace(/\s+[a-zA-Z]$/, '').trim();
+      if (esOpcion) {
+        if (!estacion) estacion = ultimaEstacion;
+        if (!catNombre && estacion === ultimaEstacion) catNombre = ultimaCategoria;
+        if (!ordenCategoria && estacion === ultimaEstacion) ordenCategoria = ultimoOrdenCategoria;
       }
+
+      if (!estacion) return;
+      catNombre = catNombre || 'General';
+
+      ultimaEstacion = estacion;
+      ultimaCategoria = catNombre;
+      ultimoOrdenCategoria = ordenCategoria;
+
+      const codigoBase = esOpcion ? matchCodigoOpcion[1].trim() : codigo;
 
       if (!map[estacion]) {
         map[estacion] = { nombre: estacion, categorias: {} };
@@ -829,33 +942,32 @@ export default function ECOE({ user }) {
         map[estacion].categorias[catNombre] = {
           nombre: catNombre,
           itemsMap: {},
-          orden: parseFloat(item.Orden_Categoria || item.orden_categoria || 0) || 0
+          orden: ordenCategoria
         };
       }
 
       const categoriaActual = map[estacion].categorias[catNombre];
-      const claveUnica = tieneLetraPar ? codigoBase : (codigo || descripcion);
+      const claveUnica = codigoBase || descripcion;
 
       if (!categoriaActual.itemsMap[claveUnica]) {
         categoriaActual.itemsMap[claveUnica] = {
           codigo: codigoBase,
-          descripcion: descBase,
+          descripcion: '',
           puntajeMax: 0,
-          puntajeBaseA: 0,
-          esPareadoConLetra: tieneLetraPar,
-          orden: parseFloat(item.Orden_Item || item.orden_item || 0) || 0
+          opciones: [],
+          orden: 0
         };
       }
 
-      const itemExistente = categoriaActual.itemsMap[claveUnica];
+      const it = categoriaActual.itemsMap[claveUnica];
+      if (!it.orden) it.orden = parseFloat(item.Orden_Item || item.orden_item || 0) || 0;
 
-      if (tieneLetraPar) {
-        if (letraActual === 'a') {
-          itemExistente.puntajeBaseA = puntajeMaxItem;
-        }
-        itemExistente.puntajeMax += puntajeMaxItem;
+      if (esOpcion) {
+        it.opciones.push({ color: colorOpcion, puntaje: puntajeMaxItem });
       } else {
-        itemExistente.puntajeMax = puntajeMaxItem;
+        // Ítem simple o fila padre de un ítem multiopción
+        it.descripcion = descripcion;
+        it.puntajeMax = puntajeMaxItem;
       }
     });
 
@@ -864,7 +976,9 @@ export default function ECOE({ user }) {
 
       est.categorias = Object.values(est.categorias).map((cat) => {
         let puntajeMaxCat = 0;
-        const itemsArray = Object.values(cat.itemsMap).sort((a, b) => a.orden - b.orden);
+        const itemsArray = Object.values(cat.itemsMap)
+          .map(finalizarItem)
+          .sort((a, b) => a.orden - b.orden);
 
         itemsArray.forEach((it) => {
           puntajeMaxCat += it.puntajeMax;
@@ -1107,7 +1221,10 @@ export default function ECOE({ user }) {
       if (config) {
         config.categorias.forEach((cat) => {
           cat.items.forEach((item) => {
-            itemsPuntaje[item.codigo] = normalizarNota(resultado?.detalle?.[item.codigo]);
+            itemsPuntaje[item.codigo] = normalizarNota(
+              resultado?.detalle?.[item.codigo],
+              item.opciones?.length ? item.opciones.length - 1 : 2
+            );
           });
         });
       }
@@ -1139,17 +1256,7 @@ export default function ECOE({ user }) {
       cat.items.forEach((item) => {
         const seleccion = itemsPuntaje[item.codigo] ?? 0;
 
-        if (item.esPareadoConLetra) {
-          if (seleccion === 1) {
-            puntaje += item.puntajeBaseA || 0;
-          } else if (seleccion === 2) {
-            puntaje += item.puntajeMax || 0;
-          }
-        } else {
-          if (seleccion === 1) {
-            puntaje += item.puntajeMax || 0;
-          }
-        }
+        puntaje += puntosDeItem(item, seleccion);
       });
     });
 
@@ -1164,12 +1271,7 @@ export default function ECOE({ user }) {
     let puntajeCat = 0;
     cat.items.forEach((item) => {
       const seleccion = itemsPuntaje[item.codigo] ?? 0;
-      if (item.esPareadoConLetra) {
-        if (seleccion === 1) puntajeCat += item.puntajeBaseA || 0;
-        else if (seleccion === 2) puntajeCat += item.puntajeMax || 0;
-      } else {
-        if (seleccion === 1) puntajeCat += item.puntajeMax || 0;
-      }
+      puntajeCat += puntosDeItem(item, seleccion);
     });
     return Math.round(puntajeCat * 10) / 10;
   };
@@ -1513,10 +1615,10 @@ export default function ECOE({ user }) {
                   onChange={(e) => setFiltroDiaEcoe(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
-                  <option value="todos">Todos los días (Jueves, Viernes, Sábado)</option>
+                  <option value="todos">Todos los días (Jueves, Viernes Turno Mañana, Viernes Turno Tarde)</option>
                   <option value="jueves">Jueves</option>
-                  <option value="viernes">Viernes</option>
-                  <option value="sabado">Sábado</option>
+                  <option value="viernes mañana">Viernes Turno Mañana</option>
+                  <option value="viernes tarde">Viernes Turno Tarde</option>
                 </select>
               </div>
               {esAdmin && (
@@ -1744,66 +1846,62 @@ export default function ECOE({ user }) {
                                 <div className="space-y-2">
                                   {cat.items.map((item, itemIdx) => {
                                     const nota = detalle.itemsPuntaje[item.codigo] ?? 0;
-                                    let puntosItem = 0;
-                                    if (item.esPareadoConLetra) {
-                                      if (nota === 1) puntosItem = item.puntajeBaseA || 0;
-                                      else if (nota === 2) puntosItem = item.puntajeMax || 0;
-                                    } else {
-                                      if (nota === 1) puntosItem = item.puntajeMax || 0;
-                                    }
-                                    puntosItem = Math.round(puntosItem * 10) / 10;
+                                    const esMulti = !!item.opciones && item.opciones.length > 0;
+                                    const opcionActual = esMulti ? item.opciones[nota] : null;
+                                    const puntosItem = Math.round(puntosDeItem(item, nota) * 10) / 10;
 
                                     return (
                                       <div key={itemIdx} className="bg-slate-50 rounded-lg px-3 py-2 space-y-1.5">
                                         <div className="flex justify-between items-start gap-2">
-                                          <span className="flex-1 text-xs text-slate-700">
-                                            {item.codigo ? <span className="font-semibold text-slate-500 mr-1">{item.codigo}</span> : null}
-                                            {item.descripcion}
-                                          </span>
+<span className="flex-1 text-xs text-slate-700">
+  {item.codigo ? <span className="font-semibold text-slate-500 mr-1">{item.codigo}</span> : null}
+  <DescripcionItem descripcion={item.descripcion} />
+</span>
                                           <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{puntosItem}/{item.puntajeMax} pts</span>
                                         </div>
                                         <div className="flex gap-1 no-imprimir">
-                                          {Array.from({ length: (item.esPareadoConLetra ? 2 : 1) + 1 }, (_, n) => n).map((n) => {
-                                            let iconoLabel = n;
-                                            let colorActivo = "bg-blue-600 border-blue-600 text-white";
-
-                                            if (item.esPareadoConLetra) {
-                                              if (n === 0) {
-                                                iconoLabel = "❌";
-                                                colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
-                                              } else if (n === 1) {
-                                                iconoLabel = "➖";
-                                                colorActivo = nota === n ? "bg-amber-500 border-amber-500 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-amber-50";
-                                              } else if (n === 2) {
-                                                iconoLabel = "✅";
-                                                colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
-                                              }
-                                            } else {
-                                              if (n === 0) {
-                                                iconoLabel = "❌";
-                                                colorActivo = nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50";
-                                              } else if (n === 1) {
-                                                iconoLabel = "✅";
-                                                colorActivo = nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
-                                              }
-                                            }
-
-                                            return (
-                                              <button
-                                                key={n}
-                                                type="button"
-                                                onClick={() => setNotaItem(estacion, item.codigo, n)}
-                                                className={`flex-1 rounded-md py-1.5 text-sm font-bold border transition-all ${colorActivo} ${
-                                                  nota === n ? 'ring-2 ring-offset-1 ring-slate-400' : 'text-slate-500'
-                                                }`}
-                                              >
-                                                {iconoLabel}
-                                              </button>
-                                            );
-                                          })}
+                                          {esMulti
+                                            ? item.opciones.map((op, n) => {
+                                                const est = ESTILOS_OPCION[op.color];
+                                                const activo = nota === n;
+                                                return (
+                                                  <button
+                                                    key={op.color}
+                                                    type="button"
+                                                    onClick={() => setNotaItem(estacion, item.codigo, n)}
+                                                    className={`flex-1 rounded-md py-1 font-bold border transition-all leading-tight ${
+                                                      activo ? `${est.activo} ring-2 ring-offset-1 ring-slate-400` : est.inactivo
+                                                    }`}
+                                                  >
+                                                    <span className="block text-[11px]">{est.nombre}</span>
+                                                    <span className="block text-[10px] font-semibold opacity-80">{op.puntaje} pts</span>
+                                                  </button>
+                                                );
+                                              })
+                                            : [0, 1].map((n) => {
+                                                const iconoLabel = n === 0 ? "❌" : "✅";
+                                                const colorActivo =
+                                                  n === 0
+                                                    ? nota === n ? "bg-red-600 border-red-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-red-50"
+                                                    : nota === n ? "bg-emerald-600 border-emerald-600 text-white shadow-sm" : "bg-white border-slate-200 hover:bg-emerald-50";
+                                                return (
+                                                  <button
+                                                    key={n}
+                                                    type="button"
+                                                    onClick={() => setNotaItem(estacion, item.codigo, n)}
+                                                    className={`flex-1 rounded-md py-1.5 text-sm font-bold border transition-all ${colorActivo} ${
+                                                      nota === n ? 'ring-2 ring-offset-1 ring-slate-400' : 'text-slate-500'
+                                                    }`}
+                                                  >
+                                                    {iconoLabel}
+                                                  </button>
+                                                );
+                                              })}
                                         </div>
                                         <div className="hidden modo-impresion text-[11px] font-bold text-slate-700">
-                                          Calificación otorgada: {nota} / {item.esPareadoConLetra ? 2 : 1}
+                                          {esMulti
+                                            ? `Calificación otorgada: ${opcionActual ? opcionActual.color.toUpperCase() : '—'} (${puntosItem}/${item.puntajeMax} pts)`
+                                            : `Calificación otorgada: ${nota} / 1`}
                                         </div>
                                       </div>
                                     );
