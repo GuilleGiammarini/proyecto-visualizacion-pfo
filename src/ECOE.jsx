@@ -794,6 +794,7 @@ export default function ECOE({ user }) {
   const [asignacionesRaw, setAsignacionesRaw] = useState([]);
   const [loadingEcoe, setLoadingEcoe] = useState(true);
   const [errorCarga, setErrorCarga] = useState(null);
+  const [ultimaActualizacion, setUltimaActualizacion] = useState(null);
 
   const [searchEcoe, setSearchEcoe] = useState('');
   const [filtroEstacionEcoe, setFiltroEstacionEcoe] = useState('todas');
@@ -803,6 +804,7 @@ export default function ECOE({ user }) {
   const [estacionSeleccionada, setEstacionSeleccionada] = useState(null);
   const [evaluadorActual, setEvaluadorActual] = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [estadoGuardado, setEstadoGuardado] = useState(null);
 
   const [dniPortafolio, setDniPortafolio] = useState('');
   const [dniFiltroAnalisis, setDniFiltroAnalisis] = useState('');
@@ -884,9 +886,12 @@ export default function ECOE({ user }) {
       setEstacionesConfigRaw(Array.isArray(config) ? config : []);
       setAsignacionesRaw(Array.isArray(asignaciones) ? asignaciones : []);
       setPfoDatos(Array.isArray(pfo) ? pfo : []);
+      setErrorCarga(null);
+      setUltimaActualizacion(new Date());
 
     } catch (err) {
       console.error("Error cargando datos", err);
+      setErrorCarga('No se pudieron cargar los datos de ECOE. Revisá la conexión e intentá actualizar la vista.');
     } finally {
       setLoadingEcoe(false);
     }
@@ -1305,7 +1310,7 @@ export default function ECOE({ user }) {
   };
 
   const guardarFichaEstudiante = async () => {
-    if (!estudianteSeleccionado || !estacionSeleccionada) return;
+    if (!estudianteSeleccionado || !estacionSeleccionada || guardando) return;
 
     if (!evaluadorActual.trim()) {
       alert('Ingresá el nombre del evaluador/a antes de guardar.');
@@ -1374,23 +1379,20 @@ export default function ECOE({ user }) {
       return [...prev, filaActualizada];
     });
 
-    setColaPendientes((prev) => [...prev, nuevoRegistro]);
-
-    if (navigator.onLine) {
-      try {
-        await fetch(API_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nuevoRegistro)
-        });
-      } catch (err) {
-        console.log('Guardado localmente por fallo de red:', err);
-      }
-    }
+    // La cola es el único camino de envío: evita que el mismo registro
+    // se envíe una vez desde aquí y otra desde sincronizarCola().
+    setColaPendientes((prev) => [
+      ...prev.filter((item) => String(item.idEvaluacion) !== String(idEvaluacion)),
+      nuevoRegistro
+    ]);
 
     setGuardando(false);
-    alert('¡Estación guardada con éxito!');
+    setEstadoGuardado({
+      tipo: 'info',
+      texto: navigator.onLine
+        ? `La evaluación de ${alumno} — ${estacion} se agregó a la cola de envío. El navegador no permite confirmar desde aquí que Google Sheets la haya registrado.`
+        : `La evaluación de ${alumno} — ${estacion} quedó guardada en este dispositivo y pendiente de sincronización. No cierres esta sesión hasta recuperar la conexión.`
+    });
     setEstudianteSeleccionado(null);
   };
 
@@ -1430,6 +1432,13 @@ export default function ECOE({ user }) {
 
   return (
     <div className="ecoe-root ecoe-container-full space-y-6 py-6">
+      {estadoGuardado && (
+        <div className={`ecoe-notificacion no-imprimir ${estadoGuardado.tipo === 'error' ? 'ecoe-notificacion-error' : 'ecoe-notificacion-info'}`} role="status">
+          <span className="ecoe-notificacion-icono" aria-hidden="true">ⓘ</span>
+          <p>{estadoGuardado.texto}</p>
+          <button type="button" aria-label="Cerrar aviso" onClick={() => setEstadoGuardado(null)}>×</button>
+        </div>
+      )}
       <EncabezadoECOE
         vista={vista}
         setVista={setVista}
@@ -1454,16 +1463,36 @@ export default function ECOE({ user }) {
             </span>
           )}
           {colaPendientes.length > 0 && (
-            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200" role="status">
               Pendientes de sincronizar: {colaPendientes.length}
             </span>
           )}
+          <div className="ecoe-actualizacion">
+            {ultimaActualizacion && (
+              <span aria-live="polite">Actualizado: {ultimaActualizacion.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
+            )}
+            <button
+              type="button"
+              className="ecoe-btn-actualizar"
+              onClick={cargarDatos}
+              disabled={loadingEcoe}
+              aria-label="Actualizar datos de ECOE"
+            >
+              <span aria-hidden="true">↻</span> {loadingEcoe ? 'Actualizando…' : 'Actualizar datos'}
+            </button>
+          </div>
         </div>
       </div>
 
       {errorCarga && (
-        <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xl p-4 no-imprimir">
-          {errorCarga}
+        <div className="ecoe-error-carga no-imprimir" role="alert">
+          <div>
+            <strong>No se pudieron actualizar los datos</strong>
+            <p>{errorCarga}</p>
+          </div>
+          <button type="button" onClick={cargarDatos} disabled={loadingEcoe}>
+            {loadingEcoe ? 'Reintentando…' : 'Reintentar'}
+          </button>
         </div>
       )}
 
@@ -1725,10 +1754,13 @@ export default function ECOE({ user }) {
       )}
 
       {estudianteSeleccionado && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 contenedor-modal-ecoe">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 contenedor-modal-ecoe ecoe-modal-backdrop">
           <div
             id="modal-evaluacion-contenido"
-            className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Evaluación ECOE de ${estudianteSeleccionado.alumno}`}
+            className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 space-y-6 ecoe-modal-card"
           >
             <MembretePDF />
 
@@ -1829,6 +1861,22 @@ export default function ECOE({ user }) {
                     </div>
 
                     <div className="p-4 space-y-4">
+                      {config && (
+                        <div className="ecoe-estacion-resumen no-imprimir">
+                          <div>
+                            <span className="ecoe-resumen-label">Lista de cotejo</span>
+                            <strong>{config.categorias.reduce((total, categoria) => total + categoria.items.length, 0)} ítems</strong>
+                          </div>
+                          <div>
+                            <span className="ecoe-resumen-label">Puntaje actual</span>
+                            <strong>{puntaje} / {puntajeMax} puntos</strong>
+                          </div>
+                          <div>
+                            <span className="ecoe-resumen-label">Umbral de aprobación</span>
+                            <strong>{UMBRAL_APROBACION_ESTACION}%</strong>
+                          </div>
+                        </div>
+                      )}
                       {!config ? (
                         <p className="text-xs text-slate-400 italic">
                           No hay lista de cotejo cargada para "{estacion}" en la hoja Estaciones_ConfigECOE.
@@ -1952,7 +2000,7 @@ export default function ECOE({ user }) {
                   disabled={guardando}
                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-colors shadow-sm"
                 >
-                  {guardando ? 'Guardando...' : 'Guardar Cambios'}
+                  {guardando ? 'Preparando envío…' : 'Guardar evaluación'}
                 </button>
               </div>
             </div>

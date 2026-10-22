@@ -657,3 +657,298 @@
 /* ============================================================
    FIN ECOE.css
    ============================================================ */
+/* ============================================================
+   17. MEJORAS DE USABILIDAD Y DISEÑO EN PANTALLA
+   (sin alterar el servicio de datos ni las reglas de evaluación)
+   ============================================================ */
+
+.ecoe-root {
+  color: #1e293b;
+  min-height: 60vh;
+}
+
+.ecoe-root button,
+.ecoe-root input,
+.ecoe-root select,
+.ecoe-root textarea {
+  transition: background-color .16s ease, border-color .16s ease,
+    box-shadow .16s ease, transform .16s ease;
+}
+
+.ecoe-root button:focus-visible,
+.ecoe-root input:focus-visible,
+.ecoe-root select:focus-visible,
+.ecoe-root textarea:focus-visible {
+  outline: 3px solid rgba(95, 168, 172, .65);
+  outline-offset: 2px;
+}
+
+.ecoe-notificacion {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .9rem 1rem;
+  border: 1px solid;
+  border-radius: .9rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+.ecoe-notificacion p { flex: 1; margin: 0; }
+.ecoe-notificacion button {
+  flex: 0 0 auto;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: .5rem;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.ecoe-notificacion-icono { font-size: 1.1rem; font-weight: 800; }
+.ecoe-notificacion-info { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.ecoe-notificacion-info button:hover { background: #dbeafe; }
+.ecoe-notificacion-error { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
+.ecoe-notificacion-error button:hover { background: #ffe4e6; }
+
+.ecoe-modal-backdrop {
+  padding: clamp(.5rem, 2vw, 1.5rem) !important;
+  overscroll-behavior: contain;
+}
+
+.ecoe-modal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem !important;
+  padding: clamp(1rem, 2.5vw, 1.75rem) !important;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.ecoe-modal-card > .flex.justify-between.items-center.pt-4 {
+  position: sticky;
+  bottom: -1px;
+  z-index: 5;
+  background: rgba(255, 255, 255, .97);
+  backdrop-filter: blur(10px);
+  margin: .25rem calc(clamp(1rem, 2.5vw, 1.75rem) * -1) calc(clamp(1rem, 2.5vw, 1.75rem) * -1) !important;
+  padding: 1rem clamp(1rem, 2.5vw, 1.75rem) !important;
+  box-shadow: 0 -8px 20px rgba(15, 23, 42, .045);
+}
+
+.ecoe-estacion-resumen {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .65rem;
+  margin-bottom: .25rem;
+}
+
+.ecoe-estacion-resumen > div {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  padding: .75rem .85rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: .75rem;
+  min-width: 0;
+}
+
+.ecoe-estacion-resumen strong {
+  color: #1c3f66;
+  font-size: .85rem;
+  line-height: 1.3;
+}
+
+.ecoe-resumen-label {
+  color: #64748b;
+  font-size: .65rem;
+  font-weight: 800;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+
+/* Las opciones de cotejo son controles táctiles, no simples etiquetas. */
+.ecoe-modal-card button { touch-action: manipulation; }
+.ecoe-modal-card .flex.gap-1.no-imprimir > button {
+  min-height: 42px;
+}
+
+/* Tablas y gráficos: evitan desbordes en notebooks y móviles. */
+.ecoe-root .overflow-x-auto { max-width: 100%; }
+.ecoe-root table { border-collapse: separate; border-spacing: 0; }
+.ecoe-root th { line-height: 1.35; }
+.ecoe-root td { vertical-align: middle; }
+.ecoe-root .recharts-responsive-container { min-width: 0; }
+
+@media (max-width: 640px) {
+  .ecoe-container-full {
+    padding-left: .75rem !important;
+    padding-right: .75rem !important;
+    margin-top: .75rem;
+    margin-bottom: .75rem;
+  }
+
+  .ecoe-header-gradient { border-radius: 1rem; }
+  .ecoe-header-gradient .px-6 { padding-left: 1rem; padding-right: 1rem; }
+  .ecoe-header-gradient .text-3xl { font-size: 1.8rem; }
+  .ecoe-header-gradient .bg-black\/15 > div { overflow-x: auto; }
+  .ecoe-header-gradient .bg-black\/15 button {
+    flex: 0 0 auto;
+    padding: .8rem .75rem;
+    font-size: .65rem;
+  }
+
+  .ecoe-modal-backdrop { align-items: flex-end !important; padding: 0 !important; }
+  .ecoe-modal-card {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 94dvh !important;
+    border-radius: 1.15rem 1.15rem 0 0 !important;
+    padding: 1rem !important;
+    gap: 1rem !important;
+  }
+
+  .ecoe-modal-card > .flex.justify-between.items-center.pt-4 {
+    margin: .25rem -1rem -1rem !important;
+    padding: .8rem 1rem max(.8rem, env(safe-area-inset-bottom)) !important;
+    flex-direction: column;
+    align-items: stretch;
+    gap: .6rem;
+  }
+
+  .ecoe-modal-card > .flex.justify-between.items-center.pt-4 > button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ecoe-modal-card > .flex.justify-between.items-center.pt-4 .flex.gap-3 {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: .5rem;
+  }
+
+  .ecoe-estacion-resumen { grid-template-columns: 1fr; gap: .45rem; }
+  .ecoe-estacion-resumen > div {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .6rem .7rem;
+  }
+  .ecoe-estacion-resumen strong { text-align: right; font-size: .78rem; }
+  .ecoe-notificacion { font-size: .75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecoe-root *, .ecoe-root *::before, .ecoe-root *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+.ecoe-pfo-card {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: .85rem;
+  background: linear-gradient(145deg, #fff 0%, #f8fafc 100%);
+}
+.ecoe-pfo-badge {
+  flex: 0 0 auto;
+  padding: .25rem .5rem;
+  border-radius: 999px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  font-size: .62rem;
+  font-weight: 800;
+}
+.ecoe-pfo-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .45rem;
+  padding: 2rem 1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: .85rem;
+  background: #f8fafc;
+  text-align: center;
+}
+.ecoe-pfo-vacio > span { color: #94a3b8; font-size: 1.8rem; }
+.ecoe-pfo-vacio p { margin: 0; color: #475569; font-size: .8rem; font-weight: 700; }
+.ecoe-pfo-vacio small { color: #64748b; font-size: .7rem; }
+
+
+/* ============================================================
+   Mejoras de interacción y accesibilidad (sin alterar Portafolio)
+   ============================================================ */
+.ecoe-actualizacion {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .65rem;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: .68rem;
+}
+.ecoe-btn-actualizar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  min-height: 36px;
+  padding: .5rem .8rem;
+  border: 1px solid #bfdbfe;
+  border-radius: .65rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: .72rem;
+  font-weight: 800;
+  transition: background .15s ease, border-color .15s ease;
+}
+.ecoe-btn-actualizar:hover:not(:disabled) { background: #dbeafe; border-color: #93c5fd; }
+.ecoe-btn-actualizar:disabled { opacity: .55; cursor: wait; }
+.ecoe-btn-actualizar span { font-size: 1.1rem; line-height: 1; }
+.ecoe-error-carga {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #fecdd3;
+  border-radius: .85rem;
+  background: #fff1f2;
+  color: #9f1239;
+  font-size: .78rem;
+}
+.ecoe-error-carga strong { display: block; margin-bottom: .2rem; font-weight: 800; }
+.ecoe-error-carga p { margin: 0; line-height: 1.45; }
+.ecoe-error-carga button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: .45rem .8rem;
+  border: 1px solid #fda4af;
+  border-radius: .6rem;
+  background: white;
+  color: #9f1239;
+  font-weight: 800;
+}
+.ecoe-error-carga button:hover:not(:disabled) { background: #ffe4e6; }
+.ecoe-error-carga button:disabled { opacity: .6; cursor: wait; }
+.ecoe-root button:focus-visible,
+.ecoe-root select:focus-visible,
+.ecoe-root input:focus-visible,
+.ecoe-root textarea:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, .55);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .ecoe-actualizacion { width: 100%; justify-content: space-between; }
+  .ecoe-error-carga { align-items: stretch; flex-direction: column; }
+  .ecoe-error-carga button { width: 100%; }
+}
+@media print {
+  .ecoe-actualizacion, .ecoe-error-carga { display: none !important; }
+}
