@@ -1883,20 +1883,34 @@ export default function ECOE({ user }) {
                         </p>
                       ) : (
                         <>
-                          {config.categorias.map((cat, catIdx) => {
-                            const puntajeCat = puntajeCategoria(cat, detalle.itemsPuntaje);
-                            return (
-                              <div key={catIdx} className="space-y-1.5">
-                                <div className="flex justify-between items-center">
-                                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{cat.nombre}</span>
-                                  <span className="text-[10px] font-semibold text-slate-400">{puntajeCat}/{cat.puntajeMaxCategoria} pts</span>
-                                </div>
-                                <div className="space-y-2">
-                                  {cat.items.map((item, itemIdx) => {
-                                    const nota = detalle.itemsPuntaje[item.codigo] ?? 0;
-                                    const esMulti = !!item.opciones && item.opciones.length > 0;
-                                    const opcionActual = esMulti ? item.opciones[nota] : null;
-                                    const puntosItem = Math.round(puntosDeItem(item, nota) * 10) / 10;
+                        {config.categorias.map((cat, catIdx) => {
+  const puntajeCat = puntajeCategoria(cat, detalle.itemsPuntaje);
+  
+  // Paleta ampliada de colores suaves para que soporte cualquier cantidad de secciones
+  const sectionColors = [
+    "bg-blue-100/90 border-blue-100 text-blue-900",       // Sección 1
+    "bg-emerald-100/90 border-emerald-100 text-emerald-900", // Sección 2
+    "bg-purple-100/90 border-purple-100 text-purple-900",   // Sección 3
+    "bg-amber-100/90 border-amber-100 text-amber-900",     // Sección 4
+    "bg-rose-100/90 border-rose-100 text-rose-900",         // Sección 5
+    "bg-cyan-100/90 border-cyan-100 text-cyan-900",         // Sección 6
+  ];
+  
+  // Si hay más secciones que colores en el array, usamos el módulo (%) para reciclar sin romper
+  const currentStyle = sectionColors[catIdx % sectionColors.length];
+
+  return (
+    <div key={catIdx} className={`p-3 rounded-xl border ${currentStyle} space-y-2 shadow-sm`}>
+      <div className="flex justify-between items-center">
+        <span className="text-[11px] font-bold uppercase tracking-wide">{cat.nombre}</span>
+        <span className="text-[10px] font-semibold opacity-75">{puntajeCat}/{cat.puntajeMaxCategoria} pts</span>
+      </div>
+      <div className="space-y-2">
+        {cat.items.map((item, itemIdx) => {
+          const nota = detalle.itemsPuntaje[item.codigo] ?? 0;
+          const esMulti = !!item.opciones && item.opciones.length > 0;
+          const opcionActual = esMulti ? item.opciones[nota] : null;
+          const puntosItem = Math.round(puntosDeItem(item, nota) * 10) / 10;
 
                                     return (
                                       <div key={itemIdx} className="bg-slate-50 rounded-lg px-3 py-2 space-y-1.5">
