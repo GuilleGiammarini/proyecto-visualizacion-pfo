@@ -1886,7 +1886,7 @@ export default function ECOE({ user }) {
                         {config.categorias.map((cat, catIdx) => {
   const puntajeCat = puntajeCategoria(cat, detalle.itemsPuntaje);
   
-  // Paleta ampliada de colores suaves para que soporte cualquier cantidad de secciones
+  // Paleta ampliada de colores suaves para que soporte cualquier cantidad de secciones borde más oscuro para mayor visibilidad
   const sectionColors = [
     "bg-blue-100/90 border-blue-100 text-blue-900",       // Sección 1
     "bg-emerald-100/90 border-emerald-100 text-emerald-900", // Sección 2
