@@ -577,17 +577,68 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
 
   const resumen = estudiante ? calcularResumenEstudiante(estudiante) : null;
 
-  const avancePfo = useMemo(() => {
-    if (!historialPfoEstudiante.length) return { porcentaje: 75, etapa: 'Gineco', institucion: 'Sin institución asignada (Gineco)' };
-    const completadas = historialPfoEstudiante.length;
-    const porcentaje = Math.min(100, Math.round((completadas / 7) * 100));
-    const ultimaRotacion = historialPfoEstudiante[historialPfoEstudiante.length - 1];
-    return {
-      porcentaje,
-      etapa: ultimaRotacion.rotacion || 'Gineco',
-      institucion: ultimaRotacion.hospital || 'Sin institución asignada (Gineco)'
-    };
+const modulosConEstado = useMemo(() => {
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    return historialPfoEstudiante.map((m) => {
+      const inicio = m.desde ? new Date(m.desde) : null;
+      const fin = m.hasta ? new Date(m.hasta) : null;
+      let estado = 'Completado';
+
+      if (inicio && !isNaN(inicio) && hoy < inicio) {
+        estado = 'Pendiente';
+      } else if (inicio && fin && !isNaN(inicio) && !isNaN(fin) && hoy >= inicio && hoy <= fin) {
+        estado = 'En Curso';
+      } else if (fin && !isNaN(fin) && hoy > fin) {
+        estado = 'Completado';
+      }
+
+      const fIni = inicio && !isNaN(inicio) ? inicio.toLocaleDateString('es-AR') : '';
+      const fFin = fin && !isNaN(fin) ? fin.toLocaleDateString('es-AR') : '';
+      const periodoTexto = [m.rango, fIni && fFin ? `(${fIni} al ${fFin})` : ''].filter(Boolean).join(' ');
+
+      return { ...m, estado, periodoTexto };
+    });
   }, [historialPfoEstudiante]);
+
+  // Deduce la cohorte automáticamente a partir de la primera fecha de inicio en Rotaciones_PFO
+  const cohorteReal = useMemo(() => {
+    const primera = historialPfoEstudiante.find((m) => m.desde);
+    if (!primera) return estudiante?.cohorte || 'Sin cohorte';
+    const fecha = new Date(primera.desde);
+    if (isNaN(fecha)) return estudiante?.cohorte || 'Sin cohorte';
+    const mes = fecha.toLocaleDateString('es-AR', { month: 'long' });
+    const anio = fecha.getFullYear();
+    return `${mes.charAt(0).toUpperCase() + mes.slice(1)} de ${anio}`;
+  }, [historialPfoEstudiante, estudiante]);
+
+  const localidadReal = historialPfoEstudiante[0]?.localidad || estudiante?.localidad || 'Villa María';
+
+  const avancePfo = useMemo(() => {
+    if (modulosConEstado.length === 0) {
+      return { etapa: 'Sin rotaciones registradas', institucion: '—' };
+    }
+    const enCurso = modulosConEstado.find((m) => m.estado === 'En Curso');
+    if (enCurso) {
+      return {
+        etapa: enCurso.rotacion,
+        institucion: enCurso.hospital || `Sin institución asignada (${enCurso.rotacion})`
+      };
+    }
+    const pendientes = modulosConEstado.filter((m) => m.estado === 'Pendiente');
+    if (pendientes.length === 0) {
+      const ultimo = modulosConEstado[modulosConEstado.length - 1];
+      return {
+        etapa: 'Trayecto PFO Completado',
+        institucion: ultimo.hospital || 'Todas las rotaciones finalizadas'
+      };
+    }
+    return {
+      etapa: pendientes[0].rotacion,
+      institucion: pendientes[0].hospital || `Sin institución asignada (${pendientes[0].rotacion})`
+    };
+  }, [modulosConEstado]);
 
   const descargarPortafolioPDF = () => {
     const tituloOriginal = document.title;
@@ -608,7 +659,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
     });
   };
 
-  return (
+return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl p-5 border border-slate-200 no-imprimir flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -652,11 +703,11 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-black text-slate-900">{estudiante.alumno}</h2>
                 <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-blue-200">
-                  Cohorte {estudiante.cohorte || 'Abril de 2026'}
+                  Cohorte {cohorteReal}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                DNI: <span className="font-semibold text-slate-700">{estudiante.dni}</span> · Localidad: <span className="font-semibold text-slate-700">{estudiante.localidad || 'Villa María'}</span>
+                DNI: <span className="font-semibold text-slate-700">{estudiante.dni}</span> · Localidad: <span className="font-semibold text-slate-700">{localidadReal}</span>
               </p>
             </div>
 
@@ -669,7 +720,7 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
 
           <div className="hidden modo-impresion mb-4 pb-3 border-b border-slate-300">
             <h2 className="text-xl font-bold text-slate-900">Portafolio ECOE - {estudiante.alumno}</h2>
-            <p className="text-xs text-slate-600">DNI: {estudiante.dni} · Localidad: {estudiante.localidad || 'Villa María'} · Cohorte: {estudiante.cohorte || 'Abril 2026'}</p>
+            <p className="text-xs text-slate-600">DNI: {estudiante.dni} · Localidad: {localidadReal} · Cohorte: {cohorteReal}</p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -694,86 +745,55 @@ function VistaPortafolio({ listaEstudiantes, resultadosMap, pfoMap, calcularResu
               Trayecto PFO - Cronograma de Módulos
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-800">APS</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">sem1 a 8 (09/02/2026 al 05/04/2026)</p>
-                </div>
-                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Asistencia Pública/CAPS Villa Nueva</p>
+            {modulosConEstado.length === 0 ? (
+              <p className="text-xs text-slate-400 italic">
+                No se encontraron rotaciones registradas en Rotaciones_PFO para este estudiante.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {modulosConEstado.map((mod, idx) => {
+                  const esCurso = mod.estado === 'En Curso';
+                  const esCompletado = mod.estado === 'Completado';
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-lg border flex flex-col justify-between ${
+                        esCurso
+                          ? 'border-blue-200 bg-blue-50/30 shadow-xs'
+                          : 'border-slate-100 bg-slate-50/50'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex justify-between items-center gap-2">
+                          <span className={`text-xs font-bold ${esCurso ? 'text-blue-900 font-extrabold' : 'text-slate-800'}`}>
+                            {mod.rotacion}
+                          </span>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                              esCompletado
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : esCurso
+                                ? 'bg-blue-100 text-blue-800 border-blue-200'
+                                : 'bg-slate-200 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {mod.estado}
+                          </span>
+                        </div>
+                        {mod.periodoTexto && (
+                          <p className={`text-[11px] mt-1 ${esCurso ? 'text-blue-700' : 'text-slate-500'}`}>
+                            {mod.periodoTexto}
+                          </p>
+                        )}
+                      </div>
+                      <p className={`text-[11px] font-medium mt-2 pt-2 border-t ${esCurso ? 'text-blue-900 border-blue-100 font-semibold' : 'text-slate-700 border-slate-200/60'}`}>
+                        {mod.hospital || `Sin institución asignada (${mod.rotacion})`}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
-
-              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-800">Com comunitario / APS</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">sem9 a 12 (06/04/2026 al 03/05/2026)</p>
-                </div>
-                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Comunitario de Villa Nueva</p>
-              </div>
-
-              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-800">Cirugia: Hospital</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">sem13 a 16 (04/05/2026 al 31/05/2026)</p>
-                </div>
-                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Regional Pasteur</p>
-              </div>
-
-              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-800">Libre</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">sem17 a 19 (01/06/2026 al 21/06/2026)</p>
-                </div>
-                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Sin institución asignada (Libre)</p>
-              </div>
-
-              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-slate-800">Pediatría</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Completado</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">sem20 a 26 (22/06/2026 al 09/08/2026)</p>
-                </div>
-                <p className="text-[11px] font-medium text-slate-700 mt-2 pt-2 border-t border-slate-200/60">Hospital Regional Pasteur</p>
-              </div>
-
-              <div className="p-3 rounded-lg border border-blue-200 bg-blue-50/30 flex flex-col justify-between shadow-xs">
-                <div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs font-extrabold text-blue-900">Gineco</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">En Curso</span>
-                  </div>
-                  <p className="text-[11px] text-blue-700 mt-1">sem27 a 33 (10/08/2026 al 27/09/2026)</p>
-                </div>
-                <p className="text-[11px] font-semibold text-blue-900 mt-2 pt-2 border-t border-blue-100">Sin institución asignada (Gineco)</p>
-              </div>
-
-              <div className="p-3 rounded-lg border border-slate-100 bg-slate-50/50 flex flex-col justify-between md:col-span-2">
-                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                  <div>
-                    <span className="text-xs font-bold text-slate-800">Clínica: Hospital</span>
-                    <p className="text-[11px] text-slate-500 mt-1">sem34 a 40 (28/09/2026 al 15/11/2026)</p>
-                  </div>
-                  <div className="mt-2 sm:mt-0 flex items-center gap-3">
-                    <span className="text-[11px] font-medium text-slate-700">Hospital Regional Pasteur</span>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Pendiente</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="bg-white rounded-xl p-5 border border-slate-200">
@@ -1053,7 +1073,7 @@ export default function ECOE({ user }) {
       const dia = a.Dia || a.dia || '';
       const estacion = a.Estacion || a.estacion;
 
-      const cohorte = a.Cohorte || a.cohorte || 'Abril de 2026';
+      const cohorte = a.Cohorte || a.cohorte || '...';
       const localidad = a.Localidad || a.localidad || 'Villa María';
 
       if (!dni || !estacion) return;
@@ -1176,22 +1196,27 @@ export default function ECOE({ user }) {
     });
   }, [listaEstacionesTotales, resultadosMap]);
 
-  const pfoMap = useMemo(() => {
+const pfoMap = useMemo(() => {
     const map = {};
     pfoDatos.forEach((item) => {
-      const dni = (item.DNI_Estudiante || item.dni || '').toString();
+      const dni = String(item.DNI || item.DNI_Estudiante || item.dni || '').trim();
       if (!dni) return;
       if (!map[dni]) map[dni] = [];
       map[dni].push({
-        rotacion: item.Rotacion || item.rotacion || 'Sin rotación',
-        hospital: item.Hospital || item.hospital || '',
-        calificacion: item.Calificacion || item.calificacion || '',
-        desde: item.Desde || item.desde || '',
-        hasta: item.Hasta || item.hasta || '',
-        tutor: item.Tutor || item.tutor || '',
-        observaciones: item.Observaciones || item.observaciones || ''
+        rotacion: item.Modulo || item.Rotacion || item.rotacion || 'Sin rotación',
+        rango: item['Rango/Semana'] || item.Rango || '',
+        hospital: item['Institución'] || item.Institucion || item.Hospital || item.hospital || '',
+        localidad: item.Localidad || item.localidad || '',
+        desde: item['Fecha Inicio'] || item.Desde || item.desde || '',
+        hasta: item['Fecha Fin'] || item.Hasta || item.hasta || ''
       });
     });
+
+    // Ordenamos cada alumno cronológicamente por Fecha Inicio
+    Object.values(map).forEach((lista) => {
+      lista.sort((a, b) => new Date(a.desde || 0) - new Date(b.desde || 0));
+    });
+
     return map;
   }, [pfoDatos]);
 
