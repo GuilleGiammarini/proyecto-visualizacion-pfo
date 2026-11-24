@@ -53,6 +53,26 @@ const normalizarTexto = (texto) => {
     .replace(/[\u0300-\u036f]/g, "");
 };
 
+// Orden de los días que vienen de la hoja (Lunes → Domingo; mañana antes que tarde).
+// Soporta valores como "Miercoles", "Viernes mañana", "Sabado tarde", etc.
+const ORDEN_DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+const ORDEN_TURNOS = ['manana', 'tarde', 'noche'];
+
+const claveOrdenDia = (dia) => {
+  const t = normalizarTexto(dia);
+  const d = ORDEN_DIAS.findIndex((x) => t.includes(x));
+  const tu = ORDEN_TURNOS.findIndex((x) => t.includes(x));
+  return [d === -1 ? 99 : d, tu === -1 ? 0 : tu];
+};
+
+const compararDias = (a, b) => {
+  const [da, ta] = claveOrdenDia(a);
+  const [db, tb] = claveOrdenDia(b);
+  if (da !== db) return da - db;
+  if (ta !== tb) return ta - tb;
+  return a.localeCompare(b, 'es-AR', { numeric: true });
+};
+
 const normalizarNota = (valor, maxIndice = 2) => {
   if (typeof valor === 'boolean') return valor ? NOTA_MAXIMA_ITEM : 0;
   const num = parseFloat(valor);
@@ -370,12 +390,32 @@ function VistaAnalisisResultados({ datosPorEstacion, resultadosMap, dniFiltro, l
     return conDatos.reduce((max, d) => (d.promedio > max.promedio ? d : max), conDatos[0]);
   }, [datosCalculados]);
 
-  const tasaAprobacion = useMemo(() => {
-    const conDatos = datosCalculados.filter((d) => d.evaluados > 0);
-    if (conDatos.length === 0) return 0;
-    const promedioAprobado = conDatos.filter((d) => d.promedio >= UMBRAL_APROBACION_ESTACION).length;
-    return Math.round((promedioAprobado / conDatos.length) * 100);
-  }, [datosCalculados]);
+const tasaAprobacion = useMemo(() => {
+  const estacionesActivas = new Set(
+    datosCalculados.filter((d) => d.evaluados > 0).map((d) => d.estacion)
+  );
+  if (estacionesActivas.size === 0) return 0;
+
+  // Filtramos las evaluaciones reales en resultadosMap según los filtros activos
+  const dnisPermitidos = new Set(
+    listaEstudiantes
+      .filter((e) => !dniFiltro || e.dni === dniFiltro)
+      .filter((e) => !diaFiltro || normalizarTexto(e.dia) === normalizarTexto(diaFiltro))
+      .map((e) => e.dni)
+  );
+
+  const evaluacionesFiltradas = Object.values(resultadosMap).filter(
+    (r) => estacionesActivas.has(r.estacion) && dnisPermitidos.has(r.dni)
+  );
+
+  if (evaluacionesFiltradas.length === 0) return 0;
+
+  const aprobadas = evaluacionesFiltradas.filter(
+    (r) => r.porcentaje >= UMBRAL_APROBACION_ESTACION
+  ).length;
+
+  return Math.round((aprobadas / evaluacionesFiltradas.length) * 100);
+}, [datosCalculados, resultadosMap, listaEstudiantes, dniFiltro, diaFiltro]);
 
   if (!hayDatos) {
     return (
@@ -1051,10 +1091,33 @@ export default function ECOE({ user }) {
       if (!dias.has(clave)) dias.set(clave, diaOriginal);
     });
 
-    return Array.from(dias.values()).sort((a, b) =>
-      a.localeCompare(b, 'es-AR', { numeric: true })
-    );
+    return Array.from(dias.values()).sort(compararDias);
   }, [listaEstudiantes]);
+
+  // Días disponibles para el filtro del mapa de calor: salen de la hoja de
+  // asignaciones (columna "Dia"). El evaluador solo ve los días en los que
+  // hay alumnos con su estación.
+  const listaDiasMapa = useMemo(() => {
+    const dias = new Map();
+    listaEstudiantes.forEach((est) => {
+      if (!esAdmin && !est.estaciones.some((e) => puedeVerEstacion(e))) return;
+      const diaOriginal = (est.dia || '').toString().trim();
+      if (!diaOriginal) return;
+      const clave = normalizarTexto(diaOriginal);
+      if (!dias.has(clave)) dias.set(clave, diaOriginal);
+    });
+    return Array.from(dias.values()).sort(compararDias);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listaEstudiantes, esAdmin, userEstacion]);
+
+  // Si el día elegido ya no existe (por ejemplo, cambió la hoja), vuelve a "todos".
+  useEffect(() => {
+    if (filtroDiaEcoe === 'todos') return;
+    const existe = listaDiasMapa.some(
+      (d) => normalizarTexto(d) === normalizarTexto(filtroDiaEcoe)
+    );
+    if (!existe) setFiltroDiaEcoe('todos');
+  }, [listaDiasMapa, filtroDiaEcoe]);
 
   const listaEstacionesTotales = useMemo(() => {
     const set = new Set();
@@ -1166,6 +1229,65 @@ export default function ECOE({ user }) {
     });
     return listaEstacionesTotales.filter((e) => estacionesActivas.has(e));
   }, [esAdmin, userEstacion, filtroEstacionEcoe, estudiantesFiltrados, listaEstacionesTotales]);
+
+  // ---------------------------------------------------------------
+  // REPORTE PDF DEL MAPA DE CALOR
+  // Una tabla por estación con alumno, DNI, día y resultado.
+  // Respeta los filtros activos (día, estación, búsqueda).
+  // ---------------------------------------------------------------
+  const reporteMapa = columnasEstaciones
+    .map((estacion) => {
+      const filas = estudiantesFiltrados
+        .filter((est) => est.estaciones.includes(estacion))
+        .map((est) => ({ est, resultado: resultadosMap[`${est.dni}__${estacion}`] || null }));
+      const evaluados = filas.filter((f) => f.resultado);
+      const aprobados = evaluados.filter((f) => f.resultado.porcentaje >= UMBRAL_APROBACION_ESTACION).length;
+      const promedio = evaluados.length
+        ? Math.round(evaluados.reduce((acc, f) => acc + f.resultado.porcentaje, 0) / evaluados.length)
+        : null;
+      return { estacion, filas, asignados: filas.length, evaluados: evaluados.length, aprobados, promedio };
+    })
+    .filter((g) => g.asignados > 0);
+
+  const totalesReporte = reporteMapa.reduce(
+    (acc, g) => ({
+      asignados: acc.asignados + g.asignados,
+      evaluados: acc.evaluados + g.evaluados,
+      aprobados: acc.aprobados + g.aprobados,
+      suma: acc.suma + g.filas.reduce((a, f) => a + (f.resultado ? f.resultado.porcentaje : 0), 0)
+    }),
+    { asignados: 0, evaluados: 0, aprobados: 0, suma: 0 }
+  );
+  const promedioReporte = totalesReporte.evaluados > 0 ? Math.round(totalesReporte.suma / totalesReporte.evaluados) : null;
+
+  const descripcionFiltrosReporte = [
+    filtroDiaEcoe !== 'todos' ? `Día: ${filtroDiaEcoe}` : 'Todos los días',
+    esAdmin && filtroEstacionEcoe !== 'todas' ? `Estación: ${filtroEstacionEcoe}` : null,
+    searchEcoe ? `Búsqueda: "${searchEcoe}"` : null
+  ].filter(Boolean).join(' · ');
+
+  const descargarPDFMapaCalor = () => {
+    const contenedor = document.getElementById('contenedor-reporte-mapa');
+    if (!contenedor || reporteMapa.length === 0) {
+      alert('No hay resultados para exportar con los filtros actuales.');
+      return;
+    }
+
+    const tituloOriginal = document.title;
+    const sufijoDia = filtroDiaEcoe !== 'todos' ? `_${filtroDiaEcoe.replace(/\s+/g, '_')}` : '';
+    document.title = `ECOE_Resultados${sufijoDia}`;
+    contenedor.classList.add('modo-impresion');
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print();
+        setTimeout(() => {
+          contenedor.classList.remove('modo-impresion');
+          document.title = tituloOriginal;
+        }, 500);
+      });
+    });
+  };
 
   const obtenerEstadoCelda = (resultado, asignada) => {
     if (!asignada) {
@@ -1395,6 +1517,14 @@ export default function ECOE({ user }) {
     });
     setEstudianteSeleccionado(null);
   };
+
+  // ---------------------------------------------------------------
+  // VISIBILIDAD DEL PUNTAJE
+  // El admin ve todo siempre. El evaluador NO ve puntajes ni porcentajes
+  // mientras evalúa: solo ve el resultado ya guardado de la estación
+  // (evaluación terminada), nunca el cálculo en vivo.
+  // ---------------------------------------------------------------
+  const resultadoGuardado = (dni, estacion) => resultadosMap[`${dni}__${estacion}`] || null;
 
   const descargarPDFEstacionActual = () => {
     if (!estudianteSeleccionado || !estacionSeleccionada) {
@@ -1644,10 +1774,10 @@ export default function ECOE({ user }) {
                   onChange={(e) => setFiltroDiaEcoe(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
-                  <option value="todos">Todos los días (Jueves, Viernes Turno Mañana, Viernes Turno Tarde)</option>
-                  <option value="jueves">Jueves</option>
-                  <option value="viernes mañana">Viernes Turno Mañana</option>
-                  <option value="viernes tarde">Viernes Turno Tarde</option>
+                  <option value="todos">Todos los días</option>
+                  {listaDiasMapa.map((dia) => (
+                    <option key={dia} value={dia}>{dia}</option>
+                  ))}
                 </select>
               </div>
               {esAdmin && (
@@ -1665,6 +1795,20 @@ export default function ECOE({ user }) {
                   </select>
                 </div>
               )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <p className="text-[11px] text-slate-500">
+                El PDF incluye los resultados por estación según los filtros aplicados.
+              </p>
+              <button
+                type="button"
+                onClick={descargarPDFMapaCalor}
+                disabled={reporteMapa.length === 0}
+                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+              >
+                📄 Descargar PDF de resultados
+              </button>
             </div>
           </div>
 
@@ -1750,6 +1894,82 @@ export default function ECOE({ user }) {
               </div>
             </div>
           )}
+
+          {/* Reporte para PDF: oculto en pantalla, visible solo al imprimir */}
+          <div id="contenedor-reporte-mapa" className="ecoe-reporte-mapa">
+            <MembretePDF />
+
+            <div className="ecoe-reporte-titulo">
+              <h2>Resultados ECOE por estación</h2>
+              <p>
+                {descripcionFiltrosReporte} · Emitido el {new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+              </p>
+            </div>
+
+            <div className="ecoe-reporte-kpis">
+              <div><span>Estudiantes</span><strong>{estudiantesFiltrados.length}</strong></div>
+              <div><span>Estaciones</span><strong>{reporteMapa.length}</strong></div>
+              <div><span>Evaluaciones</span><strong>{totalesReporte.evaluados}/{totalesReporte.asignados}</strong></div>
+              <div><span>Promedio general</span><strong>{promedioReporte !== null ? `${promedioReporte}%` : '—'}</strong></div>
+            </div>
+
+            {reporteMapa.map((grupo) => (
+              <table key={grupo.estacion} className="ecoe-reporte-tabla">
+                <thead>
+                  <tr className="ecoe-reporte-espaciador"><th colSpan={9}></th></tr>
+                  <tr className="ecoe-reporte-estacion">
+                    <th colSpan={9}>
+                      <span className="ecoe-reporte-estacion-nombre">{grupo.estacion}</span>
+                      <span className="ecoe-reporte-estacion-resumen">
+                        {grupo.evaluados}/{grupo.asignados} evaluados · {grupo.aprobados} aprobados
+                        {grupo.promedio !== null ? ` · Promedio: ${grupo.promedio}%` : ''}
+                      </span>
+                    </th>
+                  </tr>
+                  <tr className="ecoe-reporte-columnas">
+                    <th className="col-num">N°</th>
+                    <th className="col-alumno">Alumno</th>
+                    <th>DNI</th>
+                    <th>Día</th>
+                    <th className="col-centro">Puntaje</th>
+                    <th className="col-centro">%</th>
+                    <th className="col-centro">Nota</th>
+                    <th className="col-centro">Estado</th>
+                    <th>Evaluador/a</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grupo.filas.map(({ est, resultado }, i) => {
+                    const claseEstado = !resultado
+                      ? 'ecoe-estado-pendiente'
+                      : resultado.porcentaje >= UMBRAL_APROBACION_ESTACION
+                      ? 'ecoe-estado-aprobado'
+                      : 'ecoe-estado-desaprobado';
+                    return (
+                      <tr key={est.dni}>
+                        <td className="col-num">{i + 1}</td>
+                        <td className="col-alumno">{est.alumno}</td>
+                        <td>{est.dni}</td>
+                        <td>{est.dia || 'S/D'}</td>
+                        <td className="col-centro">{resultado ? `${resultado.puntaje}/${resultado.puntajeMax}` : '—'}</td>
+                        <td className="col-centro col-fuerte">{resultado ? `${resultado.porcentaje}%` : '—'}</td>
+                        <td className="col-centro col-fuerte">{resultado ? resultado.notaEscala : '—'}</td>
+                        <td className="col-centro">
+                          <span className={`ecoe-estado ${claseEstado}`}>
+                            {resultado ? resultado.estado : 'Pendiente'}
+                          </span>
+                        </td>
+                        <td>{resultado?.evaluador || '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="ecoe-reporte-espaciador"><td colSpan={9}></td></tr>
+                </tfoot>
+              </table>
+            ))}
+          </div>
         </>
       )}
 
@@ -1780,6 +2000,7 @@ export default function ECOE({ user }) {
 
             {(() => {
               const resumen = calcularResumenEstudiante(estudianteSeleccionado);
+              if (!esAdmin && resumen.evaluadas === 0) return null;
               return (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
@@ -1818,9 +2039,14 @@ export default function ECOE({ user }) {
               <div className="flex flex-wrap gap-2 no-imprimir">
                 {estudianteSeleccionado.estaciones.map((estacion, idx) => {
                   const detalle = estudianteSeleccionado.estacionesDetalle[estacion];
-                  const { porcentaje, notaEscala } = puntajeEstacion(estacion, detalle.itemsPuntaje);
+                  const guardado = resultadoGuardado(estudianteSeleccionado.dni, estacion);
+                  // Admin: cálculo en vivo. Evaluador: solo el resultado ya guardado.
+                  const { porcentaje, notaEscala } = esAdmin
+                    ? puntajeEstacion(estacion, detalle.itemsPuntaje)
+                    : { porcentaje: guardado?.porcentaje ?? 0, notaEscala: guardado?.notaEscala ?? 0 };
                   const activa = estacionSeleccionada === estacion;
                   const aprobada = porcentaje >= UMBRAL_APROBACION_ESTACION;
+                  const mostrarPuntaje = esAdmin || !!guardado;
                   return (
                     <button
                       key={idx}
@@ -1837,7 +2063,7 @@ export default function ECOE({ user }) {
                           activa ? 'bg-white/20 text-white' : aprobada ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
                         }`}
                       >
-                        {porcentaje}% (Nota: {notaEscala})
+                        {mostrarPuntaje ? `${porcentaje}% (Nota: ${notaEscala})` : 'Sin evaluar'}
                       </span>
                     </button>
                   );
@@ -1848,16 +2074,32 @@ export default function ECOE({ user }) {
                 const estacion = estacionSeleccionada;
                 const config = estacionesConfigMap[estacion];
                 const detalle = estudianteSeleccionado.estacionesDetalle[estacion];
-                const { puntaje, puntajeMax, porcentaje, notaEscala } = puntajeEstacion(estacion, detalle.itemsPuntaje);
+                const calculoVivo = puntajeEstacion(estacion, detalle.itemsPuntaje);
+                const guardadoSel = resultadoGuardado(estudianteSeleccionado.dni, estacion);
+                const { puntaje, puntajeMax, porcentaje, notaEscala } = esAdmin
+                  ? calculoVivo
+                  : {
+                      puntaje: guardadoSel?.puntaje ?? 0,
+                      puntajeMax: guardadoSel?.puntajeMax ?? calculoVivo.puntajeMax,
+                      porcentaje: guardadoSel?.porcentaje ?? 0,
+                      notaEscala: guardadoSel?.notaEscala ?? 0
+                    };
                 const aprobada = porcentaje >= UMBRAL_APROBACION_ESTACION;
+                const mostrarPuntaje = esAdmin || !!guardadoSel;
 
                 return (
                   <div className="border border-slate-200 rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
                       <span className="text-xs font-bold text-slate-800">{estacion}</span>
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${aprobada ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
-                        {puntaje}/{puntajeMax} pts · {porcentaje}% — <span className="underline">Nota: {notaEscala}</span>
-                      </span>
+                      {mostrarPuntaje ? (
+                        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${aprobada ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                          {puntaje}/{puntajeMax} pts · {porcentaje}% — <span className="underline">Nota: {notaEscala}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-slate-200 text-slate-600">
+                          Evaluación en curso
+                        </span>
+                      )}
                     </div>
 
                     <div className="p-4 space-y-4">
@@ -1867,14 +2109,18 @@ export default function ECOE({ user }) {
                             <span className="ecoe-resumen-label">Lista de cotejo</span>
                             <strong>{config.categorias.reduce((total, categoria) => total + categoria.items.length, 0)} ítems</strong>
                           </div>
-                          <div>
-                            <span className="ecoe-resumen-label">Puntaje actual</span>
-                            <strong>{puntaje} / {puntajeMax} puntos</strong>
-                          </div>
-                          <div>
-                            <span className="ecoe-resumen-label">Umbral de aprobación</span>
-                            <strong>{UMBRAL_APROBACION_ESTACION}%</strong>
-                          </div>
+                          {esAdmin && (
+                            <>
+                              <div>
+                                <span className="ecoe-resumen-label">Puntaje actual</span>
+                                <strong>{puntaje} / {puntajeMax} puntos</strong>
+                              </div>
+                              <div>
+                                <span className="ecoe-resumen-label">Umbral de aprobación</span>
+                                <strong>{UMBRAL_APROBACION_ESTACION}%</strong>
+                              </div>
+                            </>
+                          )}
                         </div>
                       )}
                       {!config ? (
@@ -1903,7 +2149,9 @@ export default function ECOE({ user }) {
     <div key={catIdx} className={`p-3 rounded-xl border ${currentStyle} space-y-2 shadow-sm`}>
       <div className="flex justify-between items-center">
         <span className="text-[11px] font-bold uppercase tracking-wide">{cat.nombre}</span>
-        <span className="text-[10px] font-semibold opacity-75">{puntajeCat}/{cat.puntajeMaxCategoria} pts</span>
+        {esAdmin && (
+          <span className="text-[10px] font-semibold opacity-75">{puntajeCat}/{cat.puntajeMaxCategoria} pts</span>
+        )}
       </div>
       <div className="space-y-2">
         {cat.items.map((item, itemIdx) => {
@@ -1919,7 +2167,9 @@ export default function ECOE({ user }) {
   {item.codigo ? <span className="font-semibold text-slate-500 mr-1">{item.codigo}</span> : null}
   <DescripcionItem descripcion={item.descripcion} />
 </span>
-                                          <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{puntosItem}/{item.puntajeMax} pts</span>
+                                          {esAdmin && (
+                                            <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">{puntosItem}/{item.puntajeMax} pts</span>
+                                          )}
                                         </div>
                                         <div className="flex gap-1 no-imprimir">
                                           {esMulti
@@ -1936,7 +2186,9 @@ export default function ECOE({ user }) {
                                                     }`}
                                                   >
                                                     <span className="block text-[11px]">{est.nombre}</span>
-                                                    <span className="block text-[10px] font-semibold opacity-80">{op.puntaje} pts</span>
+                                                    {esAdmin && (
+                                                      <span className="block text-[10px] font-semibold opacity-80">{op.puntaje} pts</span>
+                                                    )}
                                                   </button>
                                                 );
                                               })
@@ -1962,7 +2214,7 @@ export default function ECOE({ user }) {
                                         </div>
                                         <div className="hidden modo-impresion text-[11px] font-bold text-slate-700">
                                           {esMulti
-                                            ? `Calificación otorgada: ${opcionActual ? opcionActual.color.toUpperCase() : '—'} (${puntosItem}/${item.puntajeMax} pts)`
+                                            ? `Calificación otorgada: ${opcionActual ? opcionActual.color.toUpperCase() : '—'}${esAdmin ? ` (${puntosItem}/${item.puntajeMax} pts)` : ''}`
                                             : `Calificación otorgada: ${nota} / 1`}
                                         </div>
                                       </div>
